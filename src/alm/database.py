@@ -3,9 +3,10 @@ from __future__ import annotations
 import os
 from typing import Generator
 
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlmodel.ext.asyncio.session import AsyncSession
-from alm.models import GrafanaAlert
+from alm.models import GrafanaAlert, RAGEmbedding
 from alm.agents.state import GrafanaAlertState
 from alm.utils.logger import get_logger
 
@@ -24,8 +25,24 @@ async def init_tables(delete_tables=False):
     async with engine.begin() as conn:
         if delete_tables:
             logger.info("Starting to delete tables")
+            # Only delete GrafanaAlert table, NOT RAGEmbedding
+            # RAG embeddings should persist across training pipeline runs
             await conn.run_sync(GrafanaAlert.metadata.drop_all)
+            # RAGEmbedding table is NOT deleted - it persists across runs
+
+        # Ensure pgvector extension is enabled (must be done before creating tables)
+        try:
+            await conn.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            logger.info("pgvector extension enabled")
+        except Exception as e:
+            logger.warning(f"Could not enable pgvector extension: {e}")
+            logger.warning(
+                "This is OK if extension is already enabled or not available"
+            )
+
+        # Create all tables
         await conn.run_sync(GrafanaAlert.metadata.create_all)
+        await conn.run_sync(RAGEmbedding.metadata.create_all)
 
 
 def get_session():
