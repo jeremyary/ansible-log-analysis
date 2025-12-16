@@ -537,7 +537,6 @@ def create_app():
             lines=5,
             max_lines=20,
             interactive=False,
-            show_copy_button=True,
         )
 
         # Row 2: Outputs (toggleable)
@@ -599,7 +598,6 @@ def create_app():
                         lines=8,
                         max_lines=8,
                         interactive=False,
-                        show_copy_button=True,
                     )
 
                 with gr.Column():
