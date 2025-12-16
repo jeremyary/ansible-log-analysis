@@ -142,7 +142,7 @@ services:
     restart: unless-stopped
 
   postgres:
-    image: postgres:15
+    image: pgvector/pgvector:pg15  # PostgreSQL with pgvector extension
     environment:
       - POSTGRES_USER=user
       - POSTGRES_PASSWORD=password
@@ -176,6 +176,8 @@ services:
         condition: service_healthy
       alm-embedding:
         condition: service_healthy
+      alm-rag:
+        condition: service_started  # RAG service can start before embeddings are ready
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
@@ -225,6 +227,35 @@ services:
       start_period: 180s  # Model loading can take 3+ minutes
     # Note: This service requires significant memory (8Gi recommended)
     # Adjust resources based on your system capabilities
+
+  alm-rag:
+    build:
+      context: ../..
+      dockerfile: services/rag/Containerfile
+    container_name: alm-rag
+    ports:
+      - "8002:8002"
+    environment:
+      # Use container network name for PostgreSQL (not localhost)
+      # Override any local DATABASE_URL to use container network
+      - DATABASE_URL=postgresql+asyncpg://user:password@postgres:5432/logsdb
+      - EMBEDDINGS_LLM_URL=http://alm-embedding:8080
+      - RAG_MODEL_NAME=nomic-ai/nomic-embed-text-v1.5
+      - PORT=8002
+    networks:
+      - alm
+    depends_on:
+      postgres:
+        condition: service_healthy
+      alm-embedding:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8002/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s  # Service starts immediately, but index may take time to load
 
 volumes:
   postgres_data:

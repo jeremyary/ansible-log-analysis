@@ -1,4 +1,4 @@
-.PHONY: deploy start stop status help postgres phoenix loki-stack aap-mock replay stop-replay backend ui annotation health logs restart clean stop-postgres stop-phoenix stop-loki-stack stop-aap-mock embedding stop-embedding wait-for-embedding test-embedding test-rag
+.PHONY: deploy start stop status help postgres phoenix loki-stack aap-mock replay stop-replay backend ui annotation health logs restart clean stop-postgres stop-phoenix stop-loki-stack stop-aap-mock embedding stop-embedding wait-for-embedding rag stop-rag test-embedding test-rag
 .DEFAULT_GOAL := help
 
 include ../../.env
@@ -36,8 +36,10 @@ help: ## Show this help message
 	@echo ""
 	@echo "📚 RAG Setup:"
 	@echo "  1. Place PDF files in data/knowledge_base/"
-	@echo "  2. Run 'make run-whole-training-pipeline' to build RAG index"
-	@echo "  3. Ensure RAG_ENABLED=true in .env file"
+	@echo "  2. Start services: 'make start' (includes RAG service)"
+	@echo "  3. Run 'make run-whole-training-pipeline' to build RAG embeddings in PostgreSQL"
+	@echo "  4. RAG service will automatically load embeddings when available"
+	@echo "  5. Ensure RAG_ENABLED=true and RAG_SERVICE_URL=http://alm-rag:8002 in .env file"
 	@echo ""
 
 
@@ -76,6 +78,12 @@ loki-stack: ## 📊 Start Loki stack (Loki, Loki MCP Server, Grafana, Promtail)
 embedding: ## 🤖 Start Embedding Service (TEI)
 	@echo "   Starting Embedding Service (TEI)..."
 	@$(COMPOSE_CMD) -f compose.yaml up -d alm-embedding
+
+rag: ## 🔍 Start RAG Service
+	@echo "   Starting RAG Service..."
+	@$(COMPOSE_CMD) -f compose.yaml up -d alm-rag
+	@echo "   ⚠️  Note: RAG service will poll PostgreSQL for embeddings"
+	@echo "   It will become ready once embeddings are available (after init job runs)"
 
 wait-for-embedding: ## ⏳ Wait for embedding service to be ready (optional, for manual use)
 	@echo "   Waiting for embedding service to be ready (this may take 3-5 minutes for model loading)..."
@@ -182,6 +190,10 @@ stop-embedding: ## 🛑 Stop Embedding Service
 	@$(COMPOSE_CMD) -f compose.yaml down alm-embedding || true
 	@echo "   ✓ Embedding service stopped and removed"
 
+stop-rag: ## 🛑 Stop RAG Service
+	@$(COMPOSE_CMD) -f compose.yaml down alm-rag || true
+	@echo "   ✓ RAG service stopped and removed"
+
 kill-ports: ## 🔌 Kill processes using required ports
 	@if [ "$$(uname)" = "Darwin" ]; then \
 		lsof -ti :7860 | xargs kill -9 2>/dev/null || true; \
@@ -232,6 +244,12 @@ kill-ports: ## 🔌 Kill processes using required ports
 	fi
 	@echo "   ✓ Loki MCP Server 8081 killed"
 	@if [ "$$(uname)" = "Darwin" ]; then \
+		lsof -ti :8002 | xargs kill -9 2>/dev/null || true; \
+	else \
+		fuser -k 8002/tcp 2>/dev/null || true; \
+	fi
+	@echo "   ✓ RAG Service 8002 killed"
+	@if [ "$$(uname)" = "Darwin" ]; then \
 		lsof -ti :3000 | xargs kill -9 2>/dev/null || true; \
 	else \
 		fuser -k 3000/tcp 2>/dev/null || true; \
@@ -251,6 +269,7 @@ status: ## 📊 Show status of all services
 	@echo "   📊 Loki: $(shell $(COMPOSE_CMD) ps 2>/dev/null | grep 'loki' | grep -v 'loki-mcp' | grep -q 'Up' && echo 'Running' || echo 'Stopped') - http://localhost:3100"
 	@echo "   🔍 Loki MCP Server: $(shell $(COMPOSE_CMD) ps 2>/dev/null | grep 'loki-mcp-server' | grep -q 'Up' && echo 'Running' || echo 'Stopped') - http://localhost:8081"
 	@echo "   🤖 Embedding Service: $(shell $(COMPOSE_CMD) ps 2>/dev/null | grep 'alm-embedding' | grep -q 'Up' && echo 'Running' || echo 'Stopped') - http://localhost:8080"
+	@echo "   🔍 RAG Service: $(shell $(COMPOSE_CMD) ps 2>/dev/null | grep 'alm-rag' | grep -q 'Up' && echo 'Running' || echo 'Stopped') - http://localhost:8002"
 	@echo "   📈 Grafana: $(shell $(COMPOSE_CMD) ps 2>/dev/null | grep 'grafana' | grep -q 'Up' && echo 'Running' || echo 'Stopped') - http://localhost:3000"
 	@echo "   📝 Promtail: $(shell $(COMPOSE_CMD) ps 2>/dev/null | grep 'promtail' | grep -q 'Up' && echo 'Running' || echo 'Stopped')"
 	@echo "   🎭 AAP Mock: $(shell $(COMPOSE_CMD) ps 2>/dev/null | grep 'aap-mock' | grep -q 'Up' && echo 'Running' || echo 'Stopped') - http://localhost:8082"
@@ -285,14 +304,20 @@ run-whole-training-pipeline: ## 🔍 Run whole training pipeline (builds RAG ind
 	@( cd ../.. && uv run init_pipeline.py )
 
 # Add new target to check RAG status
-rag-status: ## 📊 Check RAG index status
-	@echo "📊 RAG Index Status:"
-	@if [ -f "../../data/ansible_errors.index" ] && [ -f "../../data/error_metadata.pkl" ]; then \
-		echo "   ✅ RAG index exists"; \
-		ls -lh ../../data/ansible_errors.index ../../data/error_metadata.pkl; \
+rag-status: ## 📊 Check RAG service and index status
+	@echo "📊 RAG Service Status:"
+	@if curl -s -f http://localhost:8002/health >/dev/null 2>&1; then \
+		echo "   ✅ RAG service is running"; \
+		if curl -s -f http://localhost:8002/ready >/dev/null 2>&1; then \
+			index_size=$$(curl -s http://localhost:8002/ready | grep -o '"index_size":[0-9]*' | grep -o '[0-9]*' || echo "unknown"); \
+			echo "   ✅ RAG index is loaded ($$index_size embeddings)"; \
+		else \
+			echo "   ⚠️  RAG index not loaded yet (waiting for embeddings)"; \
+			echo "   Run 'make run-whole-training-pipeline' to build embeddings"; \
+		fi; \
 	else \
-		echo "   ❌ RAG index not found"; \
-		echo "   Run 'make run-whole-training-pipeline' to build it"; \
+		echo "   ❌ RAG service is not running"; \
+		echo "   Start it with: make rag"; \
 	fi
 	@if [ -d "../../data/knowledge_base" ]; then \
 		pdf_count=$$(ls -1 ../../data/knowledge_base/*.pdf 2>/dev/null | wc -l); \
@@ -327,14 +352,40 @@ test-embedding: ## 🧪 Test embedding service
 	@echo ""
 	@echo "✅ Embedding service test passed!"
 
-test-rag: ## 🧪 Test RAG system (requires RAG index)
-	@echo "🧪 Testing RAG System..."
-	@if [ ! -f "../../data/ansible_errors.index" ]; then \
-		echo "❌ RAG index not found. Run 'make run-whole-training-pipeline' first."; \
+test-rag: ## 🧪 Test RAG service (requires RAG service running and embeddings in PostgreSQL)
+	@echo "🧪 Testing RAG Service..."
+	@echo ""
+	@echo "1. Health Check:"
+	@if curl -s -f http://localhost:8002/health >/dev/null 2>&1; then \
+		echo "   ✅ Service is healthy"; \
+	else \
+		echo "   ❌ Service is not responding"; \
 		exit 1; \
 	fi
-	@echo "Running RAG test script..."
-	@(cd ../.. && uv run python tests/rag/test_embeddings.py)
+	@echo ""
+	@echo "2. Readiness Check:"
+	@if curl -s -f http://localhost:8002/ready >/dev/null 2>&1; then \
+		echo "   ✅ Service is ready (index loaded)"; \
+	else \
+		echo "   ⚠️  Service is not ready (index not loaded yet)"; \
+		echo "   Run 'make run-whole-training-pipeline' to build embeddings"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "3. Test Query:"
+	@response=$$(curl -s -X POST http://localhost:8002/rag/query \
+		-H "Content-Type: application/json" \
+		-d '{"query": "ansible playbook execution failed", "top_k": 5, "top_n": 3, "similarity_threshold": 0.6}'); \
+	if echo "$$response" | grep -q '"results"'; then \
+		echo "   ✅ Query successful"; \
+		echo "   Response preview: $$(echo $$response | head -c 200)..."; \
+	else \
+		echo "   ❌ Query failed"; \
+		echo "   Response: $$response"; \
+		exit 1; \
+	fi
+	@echo ""
+	@echo "✅ RAG service test passed!"
 
 health: ## 🔍 Check health of running services
 	@echo "🔍 Health Checks:"
@@ -372,6 +423,16 @@ health: ## 🔍 Check health of running services
 		echo "   🤖  Embedding Service http://localhost:8080: Healthy"; \
 	else \
 		echo "   🤖  Embedding Service http://localhost:8080: Unhealthy (may still be loading model)"; \
+	fi
+	@if curl -s http://localhost:8002/health >/dev/null 2>&1; then \
+		echo "   🔍  RAG Service http://localhost:8002: Healthy"; \
+		if curl -s http://localhost:8002/ready >/dev/null 2>&1; then \
+			echo "   🔍  RAG Service http://localhost:8002: Ready (index loaded)"; \
+		else \
+			echo "   🔍  RAG Service http://localhost:8002: Not ready (index not loaded yet)"; \
+		fi; \
+	else \
+		echo "   🔍  RAG Service http://localhost:8002: Unhealthy"; \
 	fi
 	@if curl -s http://localhost:3000 >/dev/null 2>&1; then \
 		echo "   📈  Grafana http://localhost:3000: Healthy"; \
