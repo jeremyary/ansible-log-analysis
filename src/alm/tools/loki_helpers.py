@@ -299,7 +299,7 @@ async def find_log_timestamp(
     target_log = target_result.logs[0]
     target_timestamp_raw = target_log.timestamp
 
-    logger.info("Target log found with timestamp: %s", target_timestamp_raw)
+    logger.debug("Target log found with timestamp: %s", target_timestamp_raw)
     return target_timestamp_raw, None
 
 

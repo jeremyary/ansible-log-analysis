@@ -132,7 +132,7 @@ def _embed_logs(logs: List[str]):
         show_progress_bar=True,
         # batch_size=10,
     )
-    logger.info("finished embeddings")
+    logger.debug("finished embeddings")
 
     return embeddings
 

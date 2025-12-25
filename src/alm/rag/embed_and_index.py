@@ -59,8 +59,8 @@ class EmbeddingClient:
 
     def _init_api_client(self):
         """Initialize TEI embedding client."""
-        logger.info("Initializing TEI embedding client: %s", self.api_url)
-        logger.info("  Model: %s", self.model_name)
+        logger.debug("Initializing TEI embedding client: %s", self.api_url)
+        logger.debug("  Model: %s", self.model_name)
 
         # Determine embedding dimension based on model
         # nomic-embed-text-v1.5 has 768 dimensions
@@ -69,8 +69,8 @@ class EmbeddingClient:
         else:
             self.embedding_dim = 768  # Default for nomic models
 
-        logger.info("TEI client initialized")
-        logger.info("  Embedding dimension: %d", self.embedding_dim)
+        logger.debug("TEI client initialized")
+        logger.debug("  Embedding dimension: %d", self.embedding_dim)
 
     def encode(
         self,
@@ -126,9 +126,9 @@ class EmbeddingClient:
         # TEI batch size limit (TEI MAX_CLIENT_BATCH_SIZE is 32, we use 30 to be safe)
         BATCH_SIZE = 30
 
-        logger.info("Calling TEI at: %s", url)
-        logger.info("  Model: %s", self.model_name)
-        logger.info(
+        logger.debug("Calling TEI at: %s", url)
+        logger.debug("  Model: %s", self.model_name)
+        logger.debug(
             "  Total texts: %d (will be batched into chunks of %d)",
             len(texts),
             BATCH_SIZE,
@@ -142,7 +142,7 @@ class EmbeddingClient:
             batch_num = (i // BATCH_SIZE) + 1
             total_batches = (len(texts) + BATCH_SIZE - 1) // BATCH_SIZE
 
-            logger.info(
+            logger.debug(
                 "  Processing batch %d/%d (%d texts)...",
                 batch_num,
                 total_batches,
@@ -176,7 +176,7 @@ class EmbeddingClient:
                     raise ValueError(f"Unexpected TEI response format: {result.keys()}")
 
                 all_embeddings.extend(batch_embeddings)
-                logger.info(
+                logger.debug(
                     "  Batch %d completed (%d embeddings)",
                     batch_num,
                     len(batch_embeddings),
@@ -186,7 +186,7 @@ class EmbeddingClient:
                 logger.error("  Error in batch %d: %s", batch_num, e)
                 raise
 
-        logger.info("All batches completed (%d total embeddings)", len(all_embeddings))
+        logger.debug("All batches completed (%d total embeddings)", len(all_embeddings))
         return all_embeddings
 
 
@@ -234,8 +234,8 @@ class AnsibleErrorEmbedder:
         self.index = None
         self.error_store = {}
 
-        logger.info("Embedder initialized")
-        logger.info("  Mode: TEI Service")
+        logger.debug("Embedder initialized")
+        logger.debug("  Mode: TEI Service")
 
     def group_chunks_by_error(
         self, chunks: List[Document]
@@ -249,9 +249,9 @@ class AnsibleErrorEmbedder:
         Returns:
             Dictionary mapping error_id to complete error data
         """
-        logger.info("=" * 60)
-        logger.info("STEP:INGESTION - Grouping chunks by error_id")
-        logger.info("=" * 60)
+        logger.debug("=" * 60)
+        logger.debug("STEP:INGESTION - Grouping chunks by error_id")
+        logger.debug("=" * 60)
 
         errors_by_id = defaultdict(
             lambda: {
@@ -301,22 +301,22 @@ class AnsibleErrorEmbedder:
 
             errors_by_id[error_id]["sections"][section_type] = content
 
-        logger.info(
+        logger.debug(
             "Grouped %d chunks into %d unique errors", len(chunks), len(errors_by_id)
         )
 
         # Print per-file statistics
-        logger.info("-" * 60)
-        logger.info("Section distribution per file:")
-        logger.info("-" * 60)
+        logger.debug("-" * 60)
+        logger.debug("Section distribution per file:")
+        logger.debug("-" * 60)
         for source_file in sorted(file_stats.keys()):
             stats = file_stats[source_file]
             num_errors = len(stats["errors"])
-            logger.info("%s:", Path(source_file).name)
-            logger.info("   Total errors: %d", num_errors)
-            logger.info("   Sections:")
+            logger.debug("%s:", Path(source_file).name)
+            logger.debug("   Total errors: %d", num_errors)
+            logger.debug("   Sections:")
             for section, count in sorted(stats["sections"].items()):
-                logger.info("     %s: %d errors", section, count)
+                logger.debug("     %s: %d errors", section, count)
 
         # Overall statistics
         section_counts = defaultdict(int)
@@ -324,11 +324,11 @@ class AnsibleErrorEmbedder:
             for section in error["sections"].keys():
                 section_counts[section] += 1
 
-        logger.info("-" * 60)
-        logger.info("Overall section distribution:")
-        logger.info("-" * 60)
+        logger.debug("-" * 60)
+        logger.debug("Overall section distribution:")
+        logger.debug("-" * 60)
         for section, count in sorted(section_counts.items()):
-            logger.info("  %s: %d errors", section, count)
+            logger.debug("  %s: %d errors", section, count)
 
         return dict(errors_by_id)
 
@@ -344,9 +344,9 @@ class AnsibleErrorEmbedder:
         Returns:
             Tuple of (embedding_matrix, error_ids)
         """
-        logger.info("=" * 60)
-        logger.info("GENERATING COMPOSITE EMBEDDINGS")
-        logger.info("=" * 60)
+        logger.debug("=" * 60)
+        logger.debug("GENERATING COMPOSITE EMBEDDINGS")
+        logger.debug("=" * 60)
 
         composite_texts = []
         error_ids = []
@@ -392,23 +392,23 @@ class AnsibleErrorEmbedder:
             composite_texts.append(prefixed_text)
             error_ids.append(error_id)
 
-        logger.info("Created %d composite texts", len(composite_texts))
+        logger.debug("Created %d composite texts", len(composite_texts))
         if skipped > 0:
             logger.warning(
                 "Skipped %d errors (missing description and symptoms)", skipped
             )
 
         if use_task_prefix:
-            logger.info("Using task prefix: 'search_document:'")
+            logger.debug("Using task prefix: 'search_document:'")
 
         # Generate embeddings
-        logger.info("Generating embeddings using %s...", self.model_name)
+        logger.debug("Generating embeddings using %s...", self.model_name)
 
         embeddings = self.client.encode(
             composite_texts, normalize_embeddings=True, show_progress_bar=True
         )
 
-        logger.info("Generated embeddings: shape=%s", embeddings.shape)
+        logger.debug("Generated embeddings: shape=%s", embeddings.shape)
 
         return embeddings, error_ids
 
@@ -419,13 +419,13 @@ class AnsibleErrorEmbedder:
         error_store: Dict[str, Dict[str, Any]],
     ):
         """Build FAISS index from embeddings."""
-        logger.info("=" * 60)
-        logger.info("STEP:CREATING FAISS INDEX")
-        logger.info("=" * 60)
+        logger.debug("=" * 60)
+        logger.debug("STEP:CREATING FAISS INDEX")
+        logger.debug("=" * 60)
 
         # Verify embeddings are normalized
         norms = np.linalg.norm(embeddings, axis=1)
-        logger.info(
+        logger.debug(
             "Embedding norms: min=%.4f, max=%.4f, mean=%.4f",
             norms.min(),
             norms.max(),
@@ -433,7 +433,7 @@ class AnsibleErrorEmbedder:
         )
 
         # Create FAISS index
-        logger.info(
+        logger.debug(
             "Building FAISS IndexFlatIP with dimension %d...", self.embedding_dim
         )
         self.index = faiss.IndexFlatIP(self.embedding_dim)
@@ -441,7 +441,7 @@ class AnsibleErrorEmbedder:
         # Add vectors to index
         self.index.add(embeddings)
 
-        logger.info("Index created with %d vectors", self.index.ntotal)
+        logger.debug("Index created with %d vectors", self.index.ntotal)
 
         # Create mapping from index position to error_id
         self.index_to_error_id = {i: error_id for i, error_id in enumerate(error_ids)}
@@ -449,13 +449,13 @@ class AnsibleErrorEmbedder:
         # Store only errors that have embeddings
         self.error_store = {error_id: error_store[error_id] for error_id in error_ids}
 
-        logger.info("Stored metadata for %d errors", len(self.error_store))
+        logger.debug("Stored metadata for %d errors", len(self.error_store))
 
     def save_index(self):
         """Persist FAISS index and metadata to disk."""
-        logger.info("=" * 60)
-        logger.info("SAVING INDEX AND METADATA")
-        logger.info("=" * 60)
+        logger.debug("=" * 60)
+        logger.debug("SAVING INDEX AND METADATA")
+        logger.debug("=" * 60)
 
         # Create directory if it doesn't exist
         os.makedirs(os.path.dirname(self.index_path), exist_ok=True)
@@ -463,8 +463,8 @@ class AnsibleErrorEmbedder:
         # Save FAISS index
         faiss.write_index(self.index, self.index_path)
         index_size_mb = os.path.getsize(self.index_path) / (1024 * 1024)
-        logger.info("FAISS index saved to: %s", self.index_path)
-        logger.info("  Index size: %.2f MB", index_size_mb)
+        logger.debug("FAISS index saved to: %s", self.index_path)
+        logger.debug("  Index size: %.2f MB", index_size_mb)
 
         # Save metadata
         metadata = {
@@ -480,21 +480,21 @@ class AnsibleErrorEmbedder:
             pickle.dump(metadata, f)
 
         metadata_size_mb = os.path.getsize(self.metadata_path) / (1024 * 1024)
-        logger.info("Metadata saved to: %s", self.metadata_path)
-        logger.info("  Metadata size: %.2f MB", metadata_size_mb)
-        logger.info("  Total storage: %.2f MB", index_size_mb + metadata_size_mb)
+        logger.debug("Metadata saved to: %s", self.metadata_path)
+        logger.debug("  Metadata size: %.2f MB", metadata_size_mb)
+        logger.debug("  Total storage: %.2f MB", index_size_mb + metadata_size_mb)
 
     def load_index(self):
         """Load FAISS index and metadata from disk."""
-        logger.info("=" * 60)
-        logger.info("LOADING INDEX AND METADATA")
-        logger.info("=" * 60)
+        logger.debug("=" * 60)
+        logger.debug("LOADING INDEX AND METADATA")
+        logger.debug("=" * 60)
 
         if not os.path.exists(self.index_path):
             raise FileNotFoundError(f"Index not found at {self.index_path}")
 
         self.index = faiss.read_index(self.index_path)
-        logger.info("FAISS index loaded: %d vectors", self.index.ntotal)
+        logger.debug("FAISS index loaded: %d vectors", self.index.ntotal)
 
         if not os.path.exists(self.metadata_path):
             raise FileNotFoundError(f"Metadata not found at {self.metadata_path}")
@@ -505,8 +505,8 @@ class AnsibleErrorEmbedder:
         self.error_store = metadata["error_store"]
         self.index_to_error_id = metadata["index_to_error_id"]
 
-        logger.info("Metadata loaded: %d errors", len(self.error_store))
-        logger.info("  Model: %s", metadata["model_name"])
+        logger.debug("Metadata loaded: %d errors", len(self.error_store))
+        logger.debug("  Model: %s", metadata["model_name"])
 
         if metadata["model_name"] != self.model_name:
             logger.warning("Model mismatch!")

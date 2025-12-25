@@ -40,13 +40,13 @@ class RAGHandler:
         # Check if RAG is enabled via environment variable
         rag_enabled_env = os.getenv("RAG_ENABLED", "true").lower()
         if rag_enabled_env not in ["true", "1", "yes"]:
-            logger.info("RAG is disabled (RAG_ENABLED=%s)", rag_enabled_env)
+            logger.debug("RAG is disabled (RAG_ENABLED=%s)", rag_enabled_env)
             self._enabled = False
             self._pipeline = None
             return None
 
         try:
-            logger.info("Initializing RAG pipeline (lazy loading)...")
+            logger.debug("Initializing RAG pipeline (lazy loading)...")
 
             from alm.rag.query_pipeline import AnsibleErrorQueryPipeline
 
@@ -63,7 +63,7 @@ class RAGHandler:
             )
 
             self._enabled = True
-            logger.info(
+            logger.debug(
                 "✓ RAG pipeline initialized successfully with %d errors in index",
                 len(self._pipeline.embedder.error_store),
             )
@@ -147,7 +147,7 @@ class RAGHandler:
         Returns:
             Formatted string with relevant error solutions, or empty string if unavailable
         """
-        logger.info("Retrieving cheat sheet context for log summary")
+        logger.debug("Retrieving cheat sheet context for log summary")
 
         # Initialize RAG pipeline (lazy loading)
         pipeline = self._initialize_rag_pipeline()
@@ -166,7 +166,7 @@ class RAGHandler:
             # Format results
             formatted_context = self._format_rag_results(response)
 
-            logger.info(
+            logger.debug(
                 "✓ Retrieved %d relevant errors from knowledge base (search time: %.2fms)",
                 response.metadata["num_results"],
                 response.metadata["search_time_ms"],
