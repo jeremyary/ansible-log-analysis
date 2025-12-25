@@ -136,6 +136,15 @@ loki:
       chunk_encoding: snappy
     querier:
       max_concurrent: 4
+    server:
+      http_listen_port: 3100
+      grpc_server_max_recv_msg_size: 104857600  # 100MB
+      grpc_server_max_send_msg_size: 104857600  # 100MB
+    # Client-side gRPC limits for internal component communication
+    frontend_worker:
+      grpc_client_config:
+        max_recv_msg_size: 104857600  # 100MB
+        max_send_msg_size: 104857600  # 100MB
     pattern_ingester:
       enabled: true
     limits_config:
