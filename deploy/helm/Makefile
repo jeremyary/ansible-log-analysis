@@ -3,13 +3,13 @@
 
 MAKEFLAGS += --no-print-directory
 
+# Load .env to makefile and to shell
+include ../../.env
+export $(shell sed 's/=.*//' ../../.env | xargs)
+
 # Default values
 NAMESPACE ?= $(shell oc project -q 2>/dev/null || echo "default")
-# OPENAI_API_TOKEN = 
-OPENAI_API_ENDPOINT ?= https://llama-4-scout-17b-16e-w4a16-maas-apicast-production.apps.prod.rhoai.rh-aiservices-bu.com:443/v1
-OPENAI_MODEL ?= llama-4-scout-17b-16e-w4a16
-OPENAI_TEMPERATURE ?= 0.7
-ANSIBLE_LOG_MONITOR_CHART := ansible-log-monitor
+ANSIBLE_LOG_MONITOR_CHART := alm
 
 # Parameter validation functions
 define check_cluster_login
@@ -36,46 +36,46 @@ define prompt_openai_credentials
 	echo "   LLM API Configuration Required"; \
 	echo "============================================"; \
 	echo ""; \
-	if [ -z "$$OPENAI_API_TOKEN" ]; then \
+	if [ -z "$(OPENAI_API_TOKEN)" ]; then \
 		echo -n "Enter MaaS LLM API TOKEN: "; \
 		read -s OPENAI_API_TOKEN_INPUT; \
 		echo ""; \
-		export OPENAI_API_TOKEN=$$OPENAI_API_TOKEN_INPUT; \
+		export OPENAI_API_TOKEN="$(OPENAI_API_TOKEN_INPUT)"; \
 	else \
-		echo "Using provided OPENAI_API_TOKEN"; \
+		echo "Using provided OPENAI_API_TOKEN from .env"; \
 	fi; \
-	if [ -z "$$OPENAI_API_ENDPOINT" ]; then \
+	if [ -z "$(OPENAI_API_ENDPOINT)" ]; then \
 		echo -n "Enter MaaS LLM API ENDPOINT (include /v1 suffix) [default: $$DEFAULT_ENDPOINT]: "; \
 		read OPENAI_API_ENDPOINT_INPUT; \
-		if [ -z "$$OPENAI_API_ENDPOINT_INPUT" ]; then \
-			export OPENAI_API_ENDPOINT="$$DEFAULT_ENDPOINT"; \
+		if [ -z "$(OPENAI_API_ENDPOINT_INPUT)" ]; then \
+			export OPENAI_API_ENDPOINT="$(OPENAI_API_ENDPOINT_INPUT)"; \
 		else \
-			export OPENAI_API_ENDPOINT=$$OPENAI_API_ENDPOINT_INPUT; \
+			export OPENAI_API_ENDPOINT="$(OPENAI_API_ENDPOINT_INPUT)"; \
 		fi; \
 	else \
-		echo "Using provided OPENAI_API_ENDPOINT: $$OPENAI_API_ENDPOINT"; \
+		echo "Using provided OPENAI_API_ENDPOINT from .env"; \
 	fi; \
-	if [ -z "$$OPENAI_MODEL" ]; then \
+	if [ -z "$(OPENAI_MODEL)" ]; then \
 		echo -n "Enter MaaS LLM MODEL NAME [default: $$DEFAULT_MODEL]: "; \
 		read OPENAI_MODEL_INPUT; \
-		if [ -z "$$OPENAI_MODEL_INPUT" ]; then \
-			export OPENAI_MODEL="$$DEFAULT_MODEL"; \
+		if [ -z "$(OPENAI_MODEL_INPUT)" ]; then \
+			export OPENAI_MODEL="$(OPENAI_MODEL_INPUT)"; \
 		else \
-			export OPENAI_MODEL=$$OPENAI_MODEL_INPUT; \
+			export OPENAI_MODEL="$(OPENAI_MODEL_INPUT)"; \
 		fi; \
 	else \
-		echo "Using provided OPENAI_MODEL: $$OPENAI_MODEL"; \
+		echo "Using provided OPENAI_MODEL from .env"; \
 	fi; \
-	if [ -z "$$OPENAI_TEMPERATURE" ]; then \
+	if [ -z "$(OPENAI_TEMPERATURE)" ]; then \
 		echo -n "Enter LLM TEMPERATURE [default: $$DEFAULT_TEMP]: "; \
 		read OPENAI_TEMPERATURE_INPUT; \
-		if [ -z "$$OPENAI_TEMPERATURE_INPUT" ]; then \
-			export OPENAI_TEMPERATURE="$$DEFAULT_TEMP"; \
+		if [ -z "$(OPENAI_TEMPERATURE_INPUT)" ]; then \
+			export OPENAI_TEMPERATURE="$(OPENAI_TEMPERATURE_INPUT)"; \
 		else \
-			export OPENAI_TEMPERATURE=$$OPENAI_TEMPERATURE_INPUT; \
+			export OPENAI_TEMPERATURE="$(OPENAI_TEMPERATURE_INPUT)"; \
 		fi; \
 	else \
-		echo "Using provided OPENAI_TEMPERATURE: $$OPENAI_TEMPERATURE"; \
+		echo "Using provided OPENAI_TEMPERATURE from .env"; \
 	fi; \
 	echo ""; \
 	echo "Creating Kubernetes secret '\''model-secret'\''..."; \
@@ -144,7 +144,7 @@ install: namespace
 	$(call prompt_openai_credentials)
 	@echo "🚀 Installing Ansible Log Monitor in namespace $(NAMESPACE)..."
 	@oc project $(NAMESPACE)
-	@helm install alm ./ansible-log-monitor -n $(NAMESPACE) $(env_args)
+	@helm install $(ANSIBLE_LOG_MONITOR_CHART) ./ansible-log-monitor -n $(NAMESPACE) $(env_args)
 	@echo "✅ Helm install complete"
 	@echo ""
 	@echo "⏳ Waiting for aap-mock to be ready..."
@@ -166,7 +166,7 @@ install: namespace
 uninstall:
 	$(call check_namespace)
 	@echo "Uninstalling Ansible Log Monitor from namespace $(NAMESPACE)..."
-	@helm uninstall alm -n $(NAMESPACE)
+	@helm uninstall $(ANSIBLE_LOG_MONITOR_CHART) -n $(NAMESPACE)
 	@echo "Removing model-secret if it exists..."
 	@oc delete secret model-secret -n $(NAMESPACE) --ignore-not-found
 	@echo "Removing all PVCs..."
@@ -177,7 +177,13 @@ uninstall:
 .PHONY: upgrade
 upgrade:
 	@echo "Upgrading Ansible Log Monitor in namespace $(NAMESPACE)..."
-	@helm upgrade alm ./ansible-log-monitor -n $(NAMESPACE) $(env_args)
+	@helm upgrade $(ANSIBLE_LOG_MONITOR_CHART) ./ansible-log-monitor -n $(NAMESPACE) $(env_args) 
+	@echo "Ansible Log Monitor upgraded"
+
+.PHONY: upgrade-forced
+upgrade-forced:
+	@echo "Upgrading Ansible Log Monitor in namespace $(NAMESPACE)..."
+	@helm upgrade $(ANSIBLE_LOG_MONITOR_CHART) ./ansible-log-monitor -n $(NAMESPACE) $(env_args) --force
 	@echo "Ansible Log Monitor upgraded"
 
 # Restart
