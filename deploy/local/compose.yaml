@@ -15,11 +15,12 @@ services:
         condition: service_healthy
 
   loki:
-    image: grafana/loki:latest
+    image: grafana/loki:3.6.2
     ports:
       - "3100:3100"
     volumes:
       - ./config/loki/local-config.yaml:/etc/loki/local-config.yaml:z
+      - loki_data:/loki    # Persistent storage for chunks/indexes
     command: -config.file=/etc/loki/local-config.yaml
     networks:
       - alm
@@ -33,6 +34,13 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s  # Give Loki time to fully initialize (can take 30-60s)
+
+    deploy:
+      resources:
+        limits:
+          memory: 4g
+        reservations:
+          memory: 2g
 
   grafana:
     environment:
@@ -257,3 +265,4 @@ volumes:
   postgres_data:
   aap_mock_data:
   aap_mock_logs:
+  loki_data:
