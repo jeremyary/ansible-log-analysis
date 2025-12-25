@@ -105,7 +105,7 @@ class AnsibleErrorQueryPipeline:
 
         # Initialize or use provided embedder
         if embedder is None:
-            logger.info("Initializing embedder from config...")
+            logger.debug("Initializing embedder from config...")
             self.embedder = AnsibleErrorEmbedder()
             self.embedder.load_index()
         else:
@@ -115,11 +115,11 @@ class AnsibleErrorQueryPipeline:
         if self.embedder.index is None:
             raise ValueError("Embedder must have a loaded index")
 
-        logger.info("Query pipeline initialized")
-        logger.info("  Top-k candidates: %d", self.top_k)
-        logger.info("  Top-n results: %d", self.top_n)
-        logger.info("  Similarity threshold: %s", self.similarity_threshold)
-        logger.info("  Total errors in index: %d", len(self.embedder.error_store))
+        logger.debug("Query pipeline initialized")
+        logger.debug("  Top-k candidates: %d", self.top_k)
+        logger.debug("  Top-n results: %d", self.top_n)
+        logger.debug("  Similarity threshold: %s", self.similarity_threshold)
+        logger.debug("  Total errors in index: %d", len(self.embedder.error_store))
 
     def query(
         self,
@@ -147,13 +147,13 @@ class AnsibleErrorQueryPipeline:
         top_n = top_n or self.top_n
         similarity_threshold = similarity_threshold or self.similarity_threshold
 
-        logger.info("=" * 70)
-        logger.info("QUERYING RAG SYSTEM")
-        logger.info("=" * 70)
-        logger.info(
+        logger.debug("=" * 70)
+        logger.debug("QUERYING RAG SYSTEM")
+        logger.debug("=" * 70)
+        logger.debug(
             "Query: %s", log_summary[:100] + ("..." if len(log_summary) > 100 else "")
         )
-        logger.info(
+        logger.debug(
             "Parameters: top_k=%d, top_n=%d, threshold=%s",
             top_k,
             top_n,
@@ -190,10 +190,10 @@ class AnsibleErrorQueryPipeline:
             "model": self.embedder.model_name,
         }
 
-        logger.info("Query complete in %.2fms", search_time_ms)
-        logger.info("  Retrieved: %d candidates", len(candidates))
-        logger.info("  Filtered: %d above threshold", len(filtered_results))
-        logger.info("  Returned: %d results", len(final_results))
+        logger.debug("Query complete in %.2fms", search_time_ms)
+        logger.debug("  Retrieved: %d candidates", len(candidates))
+        logger.debug("  Filtered: %d above threshold", len(filtered_results))
+        logger.debug("  Returned: %d results", len(final_results))
 
         return QueryResponse(
             query=log_summary, results=final_results, metadata=metadata

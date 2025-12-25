@@ -68,8 +68,8 @@ class AnsibleErrorParser:
                 page_content=self._reflow_text(doc.page_content), metadata=doc.metadata
             )
 
-        logger.info("Loaded PDF: %s", pdf_path)
-        logger.info("  Total pages: %d", len(documents))
+        logger.debug("Loaded PDF: %s", pdf_path)
+        logger.debug("  Total pages: %d", len(documents))
         return documents
 
     def _reflow_text(self, text: str) -> str:
@@ -280,7 +280,7 @@ class AnsibleErrorParser:
             )
             errors.append(parsed_error)
 
-        logger.info("Extracted %d error entries", len(errors))
+        logger.debug("Extracted %d error entries", len(errors))
         return errors
 
     def _find_page_number(self, documents: List[Document], char_position: int) -> int:
@@ -444,7 +444,7 @@ class AnsibleErrorParser:
                 chunk = Document(page_content=chunk_content, metadata=metadata)
                 chunks.append(chunk)
 
-        logger.info("Created %d chunks from %d errors", len(chunks), len(errors))
+        logger.debug("Created %d chunks from %d errors", len(chunks), len(errors))
         return chunks
 
     def parse_pdf_to_chunks(self, pdf_path: str) -> List[Document]:
@@ -479,7 +479,7 @@ def export_metadata_to_json(documents, output_path="metadata_export.json"):
     with open(output_path, "w", encoding="utf-8") as f:
         json.dump(metadata_list, f, indent=2, ensure_ascii=False)
 
-    logger.info("Metadata exported to: %s", output_path)
+    logger.debug("Metadata exported to: %s", output_path)
 
 
 def main():

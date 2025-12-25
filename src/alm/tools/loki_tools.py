@@ -427,7 +427,7 @@ def create_log_lines_above_tool(
                     logs=[],
                 ).model_dump_json(indent=2)
 
-            logger.info(
+            logger.debug(
                 "Successfully extracted %d logs (including target)", len(context_logs)
             )
             logger.debug(

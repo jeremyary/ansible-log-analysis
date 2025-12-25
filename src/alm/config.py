@@ -103,12 +103,12 @@ class Config:
 
     def print_config(self):
         """Print configuration summary."""
-        logger.info("=" * 70)
-        logger.info("CONFIGURATION")
-        logger.info("=" * 70)
-        logger.info("%s", self.embeddings)
-        logger.info("%s", self.storage)
-        logger.info("=" * 70)
+        logger.debug("=" * 70)
+        logger.debug("CONFIGURATION")
+        logger.debug("=" * 70)
+        logger.debug("%s", self.embeddings)
+        logger.debug("%s", self.storage)
+        logger.debug("=" * 70)
 
 
 # Global config instance
@@ -119,4 +119,4 @@ if __name__ == "__main__":
     # Test configuration loading
     config.print_config()
     config.validate()
-    logger.info("Configuration validated successfully")
+    logger.debug("Configuration validated successfully")

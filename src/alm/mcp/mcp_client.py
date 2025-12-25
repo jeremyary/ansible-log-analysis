@@ -52,7 +52,7 @@ class MCPClient:
             if not self.session_id:
                 raise Exception("No session ID received from server")
 
-            logger.info("MCP session initialized: %s", self.session_id)
+            logger.debug("MCP session initialized: %s", self.session_id)
             return response.json()
 
         except Exception as e:
