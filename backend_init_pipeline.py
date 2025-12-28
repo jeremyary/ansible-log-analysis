@@ -1,5 +1,4 @@
 import asyncio
-from alm.pipeline.offline import training_pipeline
 from alm.utils.phoenix import register_phoenix
 from alm.utils.rag_service import wait_for_rag_service
 from alm.utils.job_monitor import monitor_other_job_async, wait_for_job_complete
@@ -54,28 +53,51 @@ async def main():
         # Step 1: Setup data directories (create dirs, copy PDFs if needed)
         setup_data_directories()
 
-        # Step 2: Wait for RAG init job to complete first
-        # This ensures the RAG index is saved to MinIO before the RAG service tries to load it
+        # Step 2: Run pipeline preparation in parallel with waiting for RAG init job
+        # Preparation steps (init_tables, load_alerts, cluster_logs) don't need RAG init job
+        # This saves time by running them while we wait for the RAG init job to complete
         print("\n" + "=" * 70)
-        print("WAITING FOR RAG INIT JOB TO COMPLETE")
+        print("PREPARING PIPELINE (in parallel with RAG init job)")
         print("=" * 70)
+
+        # Start waiting for RAG init job in background
+        rag_job_wait_task = asyncio.create_task(
+            wait_for_job_complete(rag_job_name, namespace, max_wait_time=600)
+        )
+
+        # Run pipeline preparation steps that don't need RAG init job
+        # This includes: init_tables, load_alerts, cluster_logs (sentence transformer loading)
+        from alm.pipeline.offline import training_pipeline_prepare
+
+        alerts, cluster_labels, unique_cluster = await training_pipeline_prepare()
+
+        print("\n" + "=" * 70)
+        print("PIPELINE PREPARATION COMPLETE")
+        print("  Waiting for RAG init job to complete...")
+        print("=" * 70)
+
+        # Now wait for RAG init job (may already be complete)
+        # This ensures the RAG index is saved to MinIO before the RAG service tries to load it
         try:
-            await wait_for_job_complete(rag_job_name, namespace, max_wait_time=600)
+            await rag_job_wait_task
         except (TimeoutError, RuntimeError) as e:
             print(f"\n✗ ERROR: {e}")
             print("  Cannot proceed without RAG index. Exiting...")
             raise
 
-        # Step 3: Wait for RAG service to be ready (required for training pipeline)
+        # Step 3: Wait for RAG service to be ready (required for alert processing)
         # The RAG service will start after its init container detects the index in MinIO
         rag_service_url = os.getenv("RAG_SERVICE_URL", "http://alm-rag:8002")
         await wait_for_rag_service(rag_service_url)
 
-        # Step 4: Run main pipeline (clustering, summarization, etc.)
+        # Step 4: Process alerts (this requires RAG service)
         print("\n" + "=" * 70)
-        print("RUNNING MAIN PIPELINE")
+        print("PROCESSING ALERTS (requires RAG service)")
         print("=" * 70)
-        await training_pipeline()
+
+        from alm.pipeline.offline import training_pipeline_process
+
+        await training_pipeline_process(alerts, cluster_labels, unique_cluster)
 
         print("\n" + "=" * 70)
         print("✓ BACKEND INITIALIZATION COMPLETE")
