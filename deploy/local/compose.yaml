@@ -199,6 +199,7 @@ services:
       - EMBEDDINGS_LLM_URL=${EMBEDDINGS_LLM_URL}
       # Loki MCP Server
       - LOKI_MCP_SERVER_URL=${LOKI_MCP_SERVER_URL}
+      - LOG_LEVEL=${LOG_LEVEL}
     # volumes:
     #   - ./src:/app/src:ro
     #   - ./config:/app/config:ro

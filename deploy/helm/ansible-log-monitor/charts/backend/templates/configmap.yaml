@@ -27,5 +27,6 @@ data:
   RAG_TOP_K: {{ .Values.rag.query.topK | quote }}
   RAG_TOP_N: {{ .Values.rag.query.topN | quote }}
   RAG_SIMILARITY_THRESHOLD: {{ .Values.rag.query.similarityThreshold | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
   {{- end }}
 {{- end }}
