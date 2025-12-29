@@ -26,9 +26,7 @@ def detect_error_level(log: str) -> DetectedLevel:
 
 
 def get_log_message(log: str) -> str:
-    regex = r"(fatal|error|failed): \[(?P<host>[^\]]+)\]:? (([A-Z]+!)|(\(.*\))) => \{(?P<logmessage>[\s\S]*?)\}"
-    # regex = r'(fatal|error|failed): \[(?P<host>[^\]]+)\]:? ([A-Z]+!)|(\(.*\)) => \{(?P<logmessage>[\s\S]*)\}'
-    #  regex = r'(fatal|error|failed): \[(?P<host>[^\]]+)\]:? FAILED! => \{(?P<logmessage>[\s\S]*)\}'
+    regex = r"(fatal|error|failed): \[(?P<host>[^\]]+)\]:? (([A-Z]+!)|(\(.*\))) => \{(?P<logmessage>[\s\S]*)\}"
     matches = list(re.finditer(regex, log))
     match = matches[-1] if matches else None
     if match:
