@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from fastapi import APIRouter, Depends, Query, status
 from sqlmodel import select
 from sqlmodel.ext.asyncio.session import AsyncSession
@@ -110,7 +110,11 @@ async def post_log_alert(
     status: LogStatus = LogStatus.OK,
     log_type: LogType = LogType.OTHER,
     session: AsyncSession = Depends(get_session_gen),
-) -> GrafanaAlert:
+) -> Optional[GrafanaAlert]:
+    # tmp for grafana alert infernece to save tokens
+    if log_message in ["Notification test", "Grafana alert triggered"]:
+        return None
+
     log_labels = LogLabels(
         detected_level=detected_level,
         filename=filename,

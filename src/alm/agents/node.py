@@ -169,12 +169,16 @@ def _cluster_logs(embeddings: np.ndarray) -> Tuple[ClusterMixin, np.ndarray]:
 def infer_cluster_log(log: str):
     embeddings = _embed_logs([log])
     if os.getenv("CLUSTERING_HOST"):
+        logger.debug(f"inferring cluster log from {os.getenv('CLUSTERING_HOST')}")
         response = requests.post(
-            f"{os.getenv('CLUSTERING_HOST')}:{os.getenv('CLUSTERING_PORT')}/cluster",
+            f"http://{os.getenv('CLUSTERING_HOST')}:{os.getenv('CLUSTERING_PORT')}/cluster",
             json={"embeddings": embeddings.tolist()},
         )
         label_as_int = response.json()["labels"][0]
     else:
+        logger.debug(
+            f"loading cluster model from local file {os.getenv('TMP_CLUSTER_MODEL_PATH')}"
+        )
         cluster_model = joblib.load(os.getenv("TMP_CLUSTER_MODEL_PATH"))
         cluster_label = cluster_model.predict(embeddings)
         label_as_int = cluster_label.tolist()[0]
