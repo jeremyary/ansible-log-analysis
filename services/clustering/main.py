@@ -17,7 +17,7 @@ else:
 
 
 class InputData(BaseModel):
-    embeddings: list[float]  # Adjust based on your model's input shape
+    embeddings: list[list[float]]  # 2D array: list of embedding vectors
 
 
 @app.get("/health")
