@@ -65,9 +65,192 @@ grafana:
         name: Loki
         type: loki
         url: http://loki:3100
+        uid: loki
+  # Grafana Alerting Configuration
+  alerting:
+    # Contact Points - Webhook to backend inference endpoint
+    contactpoints.yaml:
+      apiVersion: 1
+      contactPoints:
+        - orgId: 1
+          name: backend-inference-webhook
+          receivers:
+            - uid: backend-webhook-receiver
+              type: webhook
+              settings:
+                # Grafana webhook URL with templated query parameters
+                # Available labels from Alloy: job, status, filename
+                # Available labels from alert rule: severity, alert_type, detected_level
+                url: 'http://alm-backend:8000/grafana-alert/?log_message={{ "{{" }} urlquery (or .CommonAnnotations.description .CommonAnnotations.summary "Grafana alert triggered") {{ "}}" }}&detected_level={{ "{{" }} urlquery (or .CommonLabels.detected_level "error") {{ "}}" }}&filename={{ "{{" }} urlquery (or .CommonLabels.filename "unknown") {{ "}}" }}&job={{ "{{" }} urlquery (or .CommonLabels.job "ansible_logs") {{ "}}" }}&service_name=grafana'
+                httpMethod: POST
+                message: ""
+              disableResolveMessage: false
+    # Notification Policies - Route alerts to backend webhook
+    policies.yaml:
+      apiVersion: 1
+      policies:
+        - orgId: 1
+          receiver: backend-inference-webhook
+          group_by:
+            - alertname
+            - status
+            - job
+          group_wait: 10s
+          group_interval: 1m
+          repeat_interval: 4h
+          routes:
+            - receiver: backend-inference-webhook
+              matchers:
+                - alertname = "Fatal Ansible Logs"
+              continue: false
+            - receiver: backend-inference-webhook
+              matchers:
+                - alertname = "Failed Ansible Logs"
+              continue: false
+    # Alert Rules - Monitor Loki for fatal/failed logs
+    # Labels from Alloy: job, status, filename
+    rules.yaml:
+      apiVersion: 1
+      groups:
+        - orgId: 1
+          name: ansible-log-alerts
+          folder: Ansible Logs
+          interval: 1m
+          rules:
+            # Alert for FATAL logs
+            - uid: fatal-logs-alert
+              title: Fatal Ansible Logs
+              condition: C
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: loki
+                  model:
+                    expr: 'count_over_time({status="fatal"}[5m])'
+                    queryType: instant
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    datasource:
+                      type: __expr__
+                      uid: __expr__
+                    expression: A
+                    reducer: sum
+                    refId: B
+                    type: reduce
+                - refId: C
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    datasource:
+                      type: __expr__
+                      uid: __expr__
+                    expression: B
+                    refId: C
+                    type: threshold
+                    conditions:
+                      - evaluator:
+                          params:
+                            - 0
+                          type: gt
+                        operator:
+                          type: and
+                        query:
+                          params:
+                            - C
+                        reducer:
+                          params: []
+                          type: last
+                        type: query
+              noDataState: NoData
+              execErrState: Error
+              for: 0s
+              annotations:
+                summary: "Detected fatal Ansible log"
+                description: "A log with status 'fatal' has been detected in job ansible_logs"
+              labels:
+                severity: critical
+                alert_type: ansible_fatal
+            # Alert for FAILED logs
+            - uid: failed-logs-alert
+              title: Failed Ansible Logs
+              condition: C
+              data:
+                - refId: A
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: loki
+                  model:
+                    expr: 'count_over_time({status="failed"}[5m])'
+                    queryType: instant
+                    refId: A
+                - refId: B
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    datasource:
+                      type: __expr__
+                      uid: __expr__
+                    expression: A
+                    reducer: sum
+                    refId: B
+                    type: reduce
+                - refId: C
+                  relativeTimeRange:
+                    from: 300
+                    to: 0
+                  datasourceUid: __expr__
+                  model:
+                    datasource:
+                      type: __expr__
+                      uid: __expr__
+                    expression: B
+                    refId: C
+                    type: threshold
+                    conditions:
+                      - evaluator:
+                          params:
+                            - 0
+                          type: gt
+                        operator:
+                          type: and
+                        query:
+                          params:
+                            - C
+                        reducer:
+                          params: []
+                          type: last
+                        type: query
+              noDataState: NoData
+              execErrState: Error
+              for: 0s
+              annotations:
+                summary: "Detected failed Ansible log"
+                description: "A log with status 'failed' has been detected"
+              labels:
+                severity: warning
+                alert_type: ansible_failed
   grafana.ini:
     analytics:
       check_for_updates: true
+    # Enable unified alerting (Grafana 9+)
+    unified_alerting:
+      enabled: true
+    alerting:
+      enabled: false
+    feature_toggles:
+      enable: alertingSimplifiedRouting,alertingQueryAndExpressionsStepMode
     log:
       level: info
       mode: console
