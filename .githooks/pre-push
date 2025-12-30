@@ -73,7 +73,7 @@ echo ""
 
 # Build the image
 echo -e "${BLUE}Building backend image...${NC}"
-if podman build --layers --cache-to "$REPOSITORY" --cache-from "$REPOSITORY" -t "$IMAGE_REFERENCE" -f Containerfile . ; then
+if podman build --layers --cache-from="$REPOSITORY" -t "$IMAGE_REFERENCE" -f Containerfile . ; then
     echo -e "${GREEN}✓ Image built successfully${NC}"
     echo ""
 else

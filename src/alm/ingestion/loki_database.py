@@ -4,11 +4,7 @@ from typing import List, Dict
 import os
 
 import httpx
-from alm.ingestion.transformations import (
-    filter_ingoring,
-    get_log_message,
-    slice_log_message,
-)
+from alm.ingestion.transformations import filter_ingoring, pre_proccess_log
 from alm.models import LogLabels, LogEntry
 from alm.utils.logger import get_logger
 
@@ -123,7 +119,13 @@ class LokiDataLoader(DataLoader):
                 log_line
             ):  # TODO remoe me after filtering it right in the ingestion
                 continue
-            timestamp = labels.get("real_timestamp", None)
+            timestamp = (
+                datetime.strptime(
+                    labels.get("real_timestamp"), "%A %d %B %Y  %H:%M:%S %z"
+                ).replace(tzinfo=None)
+                if labels.get("real_timestamp")
+                else None
+            )
             database_timestamp = datetime.fromtimestamp(
                 int(database_timestamp_str) / 1e9
             )
@@ -134,7 +136,7 @@ class LokiDataLoader(DataLoader):
             log_entry = LogEntry(
                 timestamp=timestamp,
                 log_labels=log_labels,
-                message=slice_log_message(get_log_message(log_line)),
+                message=pre_proccess_log(log_line),
             )
             log_entries.append(log_entry)
 
