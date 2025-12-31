@@ -150,7 +150,7 @@ class RAGHandler:
         Returns:
             Formatted string with relevant error solutions, or empty string if unavailable
         """
-        logger.debug("Retrieving cheat sheet context for log summary")
+        logger.info("Retrieving cheat sheet context for log summary")
 
         # Initialize RAG service client (lazy loading)
         if not self._initialize_rag_service():
@@ -168,7 +168,7 @@ class RAGHandler:
             similarity_threshold = float(os.getenv("RAG_SIMILARITY_THRESHOLD", "0.6"))
 
             # Query the RAG service
-            logger.debug(
+            logger.info(
                 "Querying RAG service with log summary: %s...", log_summary[:100]
             )
 
@@ -189,10 +189,12 @@ class RAGHandler:
             formatted_context = self._format_rag_results(response_data)
 
             metadata = response_data.get("metadata", {})
-            logger.debug(
+            num_results = metadata.get("num_results", 0)
+            search_time_ms = metadata.get("search_time_ms", 0.0)
+            logger.info(
                 "✓ Retrieved %d relevant errors from knowledge base (search time: %.2fms)",
-                metadata.get("num_results", 0),
-                metadata.get("search_time_ms", 0.0),
+                num_results,
+                search_time_ms,
             )
 
             return formatted_context

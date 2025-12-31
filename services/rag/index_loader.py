@@ -6,6 +6,8 @@ import os
 import json
 import tempfile
 import pickle
+import asyncio
+import shutil
 from pathlib import Path
 from typing import Dict, Any, Optional, Tuple
 import faiss
@@ -82,23 +84,13 @@ class RAGIndexLoader:
         except Exception:
             return False
 
-    async def load_index(
+    def _load_index_sync(
         self,
     ) -> Tuple[faiss.Index, Dict[str, Dict[str, Any]], Dict[int, str]]:
         """
-        Load FAISS index and metadata from MinIO.
-
-        Uses temp files for FAISS compatibility (FAISS prefers file paths).
-
-        Returns:
-            Tuple of (FAISS index, error_store, index_to_error_id mapping)
-
-        Raises:
-            ValueError: If index is not ready or not found
+        Synchronous implementation of load_index.
+        This method contains all the blocking I/O operations.
         """
-        if self._loaded and self.index is not None:
-            return self.index, self.error_store, self.index_to_error_id
-
         print("Loading RAG index from MinIO...")
 
         # Check if bucket exists
@@ -211,10 +203,29 @@ class RAGIndexLoader:
 
         finally:
             # Cleanup temp directory
-            import shutil
-
             if temp_dir.exists():
                 shutil.rmtree(temp_dir, ignore_errors=True)
+
+    async def load_index(
+        self,
+    ) -> Tuple[faiss.Index, Dict[str, Dict[str, Any]], Dict[int, str]]:
+        """
+        Load FAISS index and metadata from MinIO.
+
+        Uses temp files for FAISS compatibility (FAISS prefers file paths).
+        Blocking I/O operations are run in a thread pool to avoid blocking the event loop.
+
+        Returns:
+            Tuple of (FAISS index, error_store, index_to_error_id mapping)
+
+        Raises:
+            ValueError: If index is not ready or not found
+        """
+        if self._loaded and self.index is not None:
+            return self.index, self.error_store, self.index_to_error_id
+
+        # Run blocking I/O operations in a thread pool to avoid blocking the event loop
+        return await asyncio.to_thread(self._load_index_sync)
 
     async def reload_index(self):
         """Force reload of index from MinIO."""

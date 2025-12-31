@@ -30,9 +30,9 @@ def create_app() -> FastAPI:
     @app.on_event("shutdown")
     async def shutdown_event():
         """Cleanup resources on application shutdown."""
-        from alm.agents.get_more_context_agent.rag_handler import RAGHandler
-
         # Cleanup RAG handler HTTP client
+        from alm.utils.rag_handler import RAGHandler
+
         handler = RAGHandler()
         await handler.cleanup()
 

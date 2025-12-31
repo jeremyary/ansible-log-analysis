@@ -89,6 +89,14 @@ env:
 rag:
   bucketName: "rag-index"
   maxWait: 300  # Maximum wait time for initContainer in seconds
+  # RAG Init Job Image (lighter image for building RAG index)
+  initImage:
+    repository: quay.io/rh-ai-quickstart/alm-rag
+    tag: "init"
+  # Data paths (used by init job for knowledge base PDFs)
+  dataDir: "/app/data/rag"
+  knowledgeBaseDir: "/app/data/knowledge_base"
+  forceRebuild: false  # Set to true to force rebuild even if index exists
 
 resources:
   requests:

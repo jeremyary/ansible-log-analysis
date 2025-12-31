@@ -41,3 +41,6 @@ global:
   # RAG configuration (shared across all charts)
   rag:
     enabled: true
+    serviceUrl: "http://alm-rag:8002"
+    embedding:
+      apiUrl: "http://alm-embedding:8080"

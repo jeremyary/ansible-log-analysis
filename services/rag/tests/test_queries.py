@@ -31,7 +31,7 @@ load_dotenv(dotenv_path=env_path, override=False)
 # Import config to check mode
 from alm.config import config  # noqa: E402
 
-from alm.rag.query_pipeline import (  # noqa: E402
+from rag.query_pipeline import (  # noqa: E402
     AnsibleErrorQueryPipeline,
     format_response_for_display,
 )

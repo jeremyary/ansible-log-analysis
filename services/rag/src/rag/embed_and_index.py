@@ -714,7 +714,7 @@ class AnsibleErrorEmbedder:
 
 def main():
     """Process all PDFs in knowledge_base directory."""
-    from alm.rag.ingest_and_chunk import AnsibleErrorParser
+    from rag.ingest_and_chunk import AnsibleErrorParser
     import glob
 
     # Print and validate configuration

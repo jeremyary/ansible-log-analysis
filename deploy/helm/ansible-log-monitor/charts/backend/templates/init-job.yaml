@@ -67,7 +67,7 @@ spec:
             - sh
             - -c
             - |
-              python backend_init_pipeline.py && touch /init-sync/done
+              {{ .Values.initCommand }}
           env:
             - name: NAMESPACE
               value: {{ .Release.Namespace | quote }}
@@ -77,9 +77,9 @@ spec:
                   fieldPath: metadata.namespace
             - name: RAG_INIT_JOB_NAME
               value: {{ include "backend.fullname" . }}-rag-init
-            {{- if .Values.env }}
+          {{- if .Values.env }}
             {{- toYaml .Values.env | nindent 12 }}
-            {{- end }}
+          {{- end }}
           envFrom:
           {{- if .Values.config }}
             - configMapRef:
@@ -107,12 +107,6 @@ spec:
               while [ ! -f /init-sync/done ]; do
                 sleep 5
               done
-              echo "Waiting for both init jobs to complete..."
-              {{- if .Values.rag.enabled }}
-              echo "Waiting for RAG init job..."
-              oc wait --for=condition=complete --timeout=600s job/{{ include "backend.fullname" . }}-rag-init -n {{ .Release.Namespace }} || exit 1
-              echo "RAG init job completed successfully!"
-              {{- end }}
               echo "Backend init job pipeline completed successfully!"
               echo "Init complete, scaling deployment to 1 replica..."
               oc scale deployment {{ include "backend.fullname" . }} --replicas=1 -n {{ .Release.Namespace }}

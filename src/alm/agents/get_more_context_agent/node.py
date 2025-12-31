@@ -2,13 +2,15 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 from typing import Literal
 
-from alm.agents.get_more_context_agent.rag_handler import RAGHandler
+from alm.utils.rag_handler import RAGHandler
 from alm.agents.get_more_context_agent.prompts.prompts import (
     loki_router_system_message,
     loki_router_user_message,
 )
 
 # Initialize RAG handler instance
+# RAGHandler is a singleton that uses HTTP to communicate with the RAG service
+# It will gracefully handle cases where RAG is disabled or the service is unavailable
 _rag_handler = RAGHandler()
 
 
@@ -31,6 +33,7 @@ async def get_cheat_sheet_context(log_summary: str) -> str:
     Returns:
         Formatted string with relevant error solutions, or empty string if unavailable
     """
+    # RAGHandler handles RAG unavailability internally and returns empty string
     return await _rag_handler.get_cheat_sheet_context(log_summary)
 
 

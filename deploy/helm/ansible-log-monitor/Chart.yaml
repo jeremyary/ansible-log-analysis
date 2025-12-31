@@ -40,3 +40,6 @@ dependencies:
   - name: aap-mock
     version: 0.1.0
     condition: aap-mock.enabled
+  - name: rag
+    version: 0.1.0
+    condition: global.rag.enabled

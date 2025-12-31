@@ -93,6 +93,8 @@ resources:
     memory: 1Gi
     ephemeral-storage: 2Gi
 
+initCommand: "python backend_init_pipeline.py && touch /init-sync/done"
+
 initResources:
   limits:
     cpu: 2000m

@@ -20,7 +20,7 @@ import numpy as np
 from typing import List, Dict, Any, Optional
 from dataclasses import dataclass, asdict
 
-from alm.rag.embed_and_index import AnsibleErrorEmbedder
+from rag.embed_and_index import AnsibleErrorEmbedder
 from alm.utils.logger import get_logger
 
 logger = get_logger(__name__)

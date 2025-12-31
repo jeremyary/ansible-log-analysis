@@ -1,4 +1,4 @@
-.PHONY: deploy start stop status help postgres phoenix loki-stack aap-mock replay stop-replay backend ui annotation health logs restart clean stop-postgres stop-phoenix stop-loki-stack stop-aap-mock embedding stop-embedding wait-for-embedding rag stop-rag test-embedding test-rag
+.PHONY: deploy start stop status help postgres phoenix loki-stack aap-mock replay stop-replay backend ui annotation health logs restart clean stop-postgres stop-phoenix stop-loki-stack stop-aap-mock embedding stop-embedding wait-for-embedding minio stop-minio rag stop-rag test-embedding test-rag
 .DEFAULT_GOAL := help
 
 include ../../.env
@@ -51,6 +51,8 @@ start: stop ## 🚀 Start all services locally
 	@$(MAKE) -s phoenix
 	@$(MAKE) -s loki-stack
 	@$(MAKE) -s embedding
+	@$(MAKE) -s minio
+	@$(MAKE) -s rag
 	@$(MAKE) -s aap-mock
 	@$(MAKE) -s backend
 	@$(MAKE) -s ui
@@ -79,9 +81,11 @@ embedding: ## 🤖 Start Embedding Service (TEI)
 	@echo "   Starting Embedding Service (TEI)..."
 	@$(COMPOSE_CMD) -f compose.yaml up -d alm-embedding
 
-rag: ## 🔍 Start RAG Service
-	@echo "   Starting MinIO (required for RAG service)..."
+minio: ## 📦 Start MinIO (Object Storage for RAG index)
+	@echo "   Starting MinIO..."
 	@$(COMPOSE_CMD) -f compose.yaml up -d minio
+
+rag: ## 🔍 Start RAG Service
 	@echo "   Starting RAG Service..."
 	@$(COMPOSE_CMD) -f compose.yaml up -d alm-rag
 	@echo "   ⚠️  Note: RAG service will poll MinIO for index"
@@ -168,6 +172,8 @@ stop: ## 🛑 Stop all services
 	$(MAKE) -s stop-postgres & \
 	$(MAKE) -s stop-phoenix & \
 	$(MAKE) -s stop-embedding & \
+	$(MAKE) -s stop-minio & \
+	$(MAKE) -s stop-rag & \
 	wait
 	@$(MAKE) -s kill-ports
 	@echo "👋 All services stopped"
@@ -191,6 +197,11 @@ stop-aap-mock: ## 🛑 Stop AAP Mock
 stop-embedding: ## 🛑 Stop Embedding Service
 	@$(COMPOSE_CMD) -f compose.yaml down alm-embedding || true
 	@echo "   ✓ Embedding service stopped and removed"
+
+stop-minio: ## 🛑 Stop MinIO
+	@$(COMPOSE_CMD) -f compose.yaml down minio || true
+	@docker rm -f minio 2>/dev/null || true
+	@echo "   ✓ MinIO stopped and removed"
 
 stop-rag: ## 🛑 Stop RAG Service
 	@$(COMPOSE_CMD) -f compose.yaml down alm-rag || true
@@ -304,7 +315,7 @@ run-whole-training-pipeline: ## 🔍 Run whole training pipeline (builds RAG ind
 		echo "   RAG index will not be created. Add PDF files and run again."; \
 	fi
 	@echo "📦 Step 1: Building RAG index..."
-	@( cd ../.. && uv run --index-strategy unsafe-best-match rag_init_pipeline.py )
+	@( cd ../.. && uv run --index-strategy unsafe-best-match services/rag/rag_init_pipeline.py )
 	@echo "📦 Step 2: Running backend initialization..."
 	@( cd ../.. && uv run --index-strategy unsafe-best-match backend_init_pipeline.py )
 
@@ -315,7 +326,7 @@ run-rag-init: ## 🔍 Run RAG initialization only (builds RAG index)
 		echo "⚠️  WARNING: No PDF files found in data/knowledge_base/"; \
 		echo "   RAG index will not be created. Add PDF files and run again."; \
 	fi
-	@( cd ../.. && uv run --index-strategy unsafe-best-match rag_init_pipeline.py )
+	@( cd ../.. && uv run --index-strategy unsafe-best-match services/rag/rag_init_pipeline.py )
 
 run-backend-init: ## 🔍 Run backend initialization only (training pipeline)
 	@echo "🔍 Running backend initialization..."
