@@ -21,11 +21,14 @@ def detect_error_level(log: str) -> DetectedLevel:
     status_regex = r"(?P<status>failed|fatal|error):\s+\["
     match = re.search(status_regex, log)
     if match:
-        return DetectedLevel(match.group("status"))
+        status = match.group("status")
+        # Map all error patterns to ERROR since DetectedLevel only has error/warn/info/debug/unknown
+        if status in ("failed", "fatal", "error"):
+            return DetectedLevel.ERROR
     return DetectedLevel.UNKNOWN
 
 
-def get_log_message(log: str) -> str:
+def extract_error_from_log(log: str) -> str:
     regex = r"(fatal|error|failed): \[(?P<host>[^\]]+)\]:? (([A-Z]+!)|(\(.*\))) => \{(?P<logmessage>[\s\S]*)\}"
     matches = list(re.finditer(regex, log))
     match = matches[-1] if matches else None
@@ -36,6 +39,14 @@ def get_log_message(log: str) -> str:
         return logmessage
     logger.error(f"Failed to fix dictionary in log line: {log}")
     return log
+
+
+def clean_slash(log: str) -> str:
+    while r"\\" in log:
+        log = (
+            log.replace("\\\\\\\\", "\\").replace("\\\\\\", "\\").replace("\\\\", "\\")
+        )
+    return log.replace('\\"', '"')
 
 
 def slice_log_message(log: str) -> str:
@@ -52,12 +63,16 @@ def filter_ingoring(log: str) -> bool:  # TODO remove me when db filtering is wo
     return False
 
 
-def pre_proccess_log(log_line: str):
-    return slice_log_message(get_log_message(log_line))
+def pre_proccess_log_without_extraction(log_line: str) -> str:
+    return slice_log_message(clean_slash(log_line))
 
 
-def proccess_log_inference(log_message: str):
+def pre_proccess_log(log_line: str) -> str:
+    return pre_proccess_log_without_extraction(extract_error_from_log(log_line))
+
+
+def proccess_log_inference(log_message: str) -> str:
     if log_message.startswith("TASK"):
         return pre_proccess_log(log_message)
     else:
-        return slice_log_message(log_message)
+        return pre_proccess_log_without_extraction(log_message)
