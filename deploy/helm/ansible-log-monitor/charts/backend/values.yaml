@@ -11,7 +11,7 @@ image:
   # This sets the pull policy for images.
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  tag: "rag-as-a-service"
+  tag: "latest"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
 # imagePullSecrets: []
@@ -214,9 +214,9 @@ config:
   # RAG query configuration (how backend queries RAG service)
   rag:
     # Number of top candidates to retrieve from FAISS
-    topK: 10
+    topK: 4
     # Number of final results to return to the agent
-    topN: 3
+    topN: 1
     # Minimum similarity threshold (0-1)
     similarityThreshold: 0.6
 

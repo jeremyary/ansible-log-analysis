@@ -14,7 +14,16 @@ async def main():
     logger.info("ANSIBLE LOG MONITOR - BACKEND INITIALIZATION PIPELINE")
     logger.info("=" * 70)
 
-    # Step 1: Wait for RAG service to be ready (required for alert processing)
+    # Step 1: Run pipeline preparation steps
+    logger.info("\n" + "=" * 70)
+    logger.info("PREPARING PIPELINE")
+    logger.info("=" * 70)
+
+    from alm.pipeline.offline import training_pipeline_prepare
+
+    log_entries, cluster_labels, unique_cluster = await training_pipeline_prepare()
+
+    # Step 2: Wait for RAG service to be ready (required for alert processing)
     # This also implicitly waits for the RAG init job to complete, as the service
     # won't become ready until the index is built and available in MinIO
     logger.info("\n" + "=" * 70)
@@ -23,15 +32,6 @@ async def main():
 
     rag_service_url = os.getenv("RAG_SERVICE_URL", "http://alm-rag:8002")
     wait_for_rag_service(rag_service_url)
-
-    # Step 2: Run pipeline preparation steps
-    logger.info("\n" + "=" * 70)
-    logger.info("PREPARING PIPELINE")
-    logger.info("=" * 70)
-
-    from alm.pipeline.offline import training_pipeline_prepare
-
-    log_entries, cluster_labels, unique_cluster = await training_pipeline_prepare()
 
     # Step 3: Process alerts (this requires RAG service)
     logger.info("\n" + "=" * 70)
