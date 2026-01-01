@@ -27,6 +27,15 @@ def create_app() -> FastAPI:
     async def read_root() -> dict[str, str]:
         return {"service": "alm", "status": "ok"}
 
+    @app.on_event("shutdown")
+    async def shutdown_event():
+        """Cleanup resources on application shutdown."""
+        # Cleanup RAG handler HTTP client
+        from alm.utils.rag_handler import RAGHandler
+
+        handler = RAGHandler()
+        await handler.cleanup()
+
     return app
 
 

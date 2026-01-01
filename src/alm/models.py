@@ -123,3 +123,7 @@ class LogEntry(BaseModel):
         if isinstance(v, str):
             return datetime.strptime(v, "%A %d %B %Y  %H:%M:%S %z").replace(tzinfo=None)
         return v
+
+
+# RAG embeddings are now stored in MinIO, not PostgreSQL
+# The RAGEmbedding table has been removed in favor of MinIO artifact storage

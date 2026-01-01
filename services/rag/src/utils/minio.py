@@ -1,5 +1,9 @@
+"""
+Standalone MinIO utilities for RAG service.
+No dependencies on backend (alm.*) code.
+"""
+
 import os
-import io
 from typing import Optional
 from minio import Minio
 
@@ -66,30 +70,3 @@ def ensure_bucket_exists(minio_client: Minio, bucket_name: str) -> bool:
         minio_client.make_bucket(bucket_name)
         return True
     return False
-
-
-def upload_model_to_minio(model, bucket_name: str, file_name: str):
-    """
-    Upload a sklearn model to MinIO.
-
-    Args:
-        model: sklearn model to upload
-        bucket_name: MinIO bucket name
-        file_name: Name of the file in MinIO
-    """
-    # Lazy import to avoid requiring sklearn/joblib for RAG init job
-    import joblib
-
-    minio_client = get_minio_client()
-    ensure_bucket_exists(
-        minio_client, bucket_name
-    )  # Bucket creation logged by caller if needed
-
-    # Serialize model to BytesIO buffer
-    with io.BytesIO() as buffer:
-        joblib.dump(model, buffer)
-        buffer.seek(0)
-
-        minio_client.put_object(
-            bucket_name, file_name, buffer, length=buffer.getbuffer().nbytes
-        )

@@ -19,6 +19,9 @@ import os
 import pickle
 import numpy as np
 import requests
+import json
+import io
+import tempfile
 from typing import List, Dict, Any, Tuple, Optional
 from collections import defaultdict
 from pathlib import Path
@@ -26,8 +29,8 @@ from pathlib import Path
 from langchain_core.documents import Document
 import faiss
 
-from alm.config import config
-from alm.utils.logger import get_logger
+from utils.config import config
+from utils.logger import get_logger
 
 logger = get_logger(__name__)
 
@@ -233,6 +236,8 @@ class AnsibleErrorEmbedder:
 
         self.index = None
         self.error_store = {}
+        self.index_to_error_id = {}
+        self._embeddings_array = None  # Store embeddings for PostgreSQL saving
 
         logger.debug("Embedder initialized")
         logger.debug("  Mode: TEI Service")
@@ -423,6 +428,9 @@ class AnsibleErrorEmbedder:
         logger.debug("STEP:CREATING FAISS INDEX")
         logger.debug("=" * 60)
 
+        # Store embeddings array for PostgreSQL saving
+        self._embeddings_array = embeddings.copy()
+
         # Verify embeddings are normalized
         norms = np.linalg.norm(embeddings, axis=1)
         logger.debug(
@@ -452,7 +460,12 @@ class AnsibleErrorEmbedder:
         logger.debug("Stored metadata for %d errors", len(self.error_store))
 
     def save_index(self):
-        """Persist FAISS index and metadata to disk."""
+        """
+        Persist FAISS index and metadata to disk.
+
+        DEPRECATED: This method is kept for backward compatibility with tests.
+        Production code should use save_to_minio() instead.
+        """
         logger.debug("=" * 60)
         logger.debug("SAVING INDEX AND METADATA")
         logger.debug("=" * 60)
@@ -485,7 +498,12 @@ class AnsibleErrorEmbedder:
         logger.debug("  Total storage: %.2f MB", index_size_mb + metadata_size_mb)
 
     def load_index(self):
-        """Load FAISS index and metadata from disk."""
+        """
+        Load FAISS index and metadata from disk.
+
+        DEPRECATED: This method is kept for backward compatibility with tests.
+        Production code should use RAGIndexLoader (from MinIO) instead.
+        """
         logger.debug("=" * 60)
         logger.debug("LOADING INDEX AND METADATA")
         logger.debug("=" * 60)
@@ -514,7 +532,12 @@ class AnsibleErrorEmbedder:
             logger.warning("  Current: %s", self.model_name)
 
     def ingest_and_index(self, chunks: List[Document]):
-        """Complete ingestion and indexing pipeline."""
+        """
+        Complete ingestion and indexing pipeline.
+
+        DEPRECATED: This method is kept for backward compatibility with tests.
+        Production code should use ingest_and_index_to_minio() instead.
+        """
         logger.info("=" * 70)
         logger.info("ANSIBLE ERROR RAG SYSTEM - INGESTION AND INDEXING")
         logger.info("=" * 70)
@@ -528,48 +551,179 @@ class AnsibleErrorEmbedder:
         logger.info("INGESTION AND INDEXING COMPLETE")
         logger.info("=" * 70)
 
+    async def ingest_and_index_to_minio(self, chunks: List[Document]):
+        """
+        Complete ingestion and indexing pipeline, saving to MinIO.
 
-def main():
-    """Process all PDFs in knowledge_base directory."""
-    from alm.rag.ingest_and_chunk import AnsibleErrorParser
-    import glob
+        This is the async version that saves to MinIO instead of disk or PostgreSQL.
+        """
+        logger.info("=" * 70)
+        logger.info("ANSIBLE ERROR RAG SYSTEM - INGESTION AND INDEXING (MinIO)")
+        logger.info("=" * 70)
 
-    # Print and validate configuration
-    config.print_config()
-    config.validate()
+        error_store = self.group_chunks_by_error(chunks)
+        embeddings, error_ids = self.create_composite_embeddings(error_store)
+        self.build_faiss_index(embeddings, error_ids, error_store)
+        await self.save_to_minio()
 
-    logger.info("=" * 70)
-    logger.info("ANSIBLE ERROR KNOWLEDGE BASE - EMBEDDING AND INDEXING")
-    logger.info("=" * 70)
+        logger.info("=" * 70)
+        logger.info("INGESTION AND INDEXING COMPLETE (MinIO)")
+        logger.info("=" * 70)
 
-    # Initialize
-    parser = AnsibleErrorParser()
-    embedder = AnsibleErrorEmbedder()
+    async def save_to_minio(
+        self,
+        bucket_name: str = "rag-index",
+        minio_endpoint: str = None,
+        minio_port: str = None,
+        minio_access_key: str = None,
+        minio_secret_key: str = None,
+    ):
+        """
+        Save FAISS index and metadata to MinIO with status tracking via LATEST.json pointer file.
 
-    # Find PDFs
-    pdf_files = sorted(glob.glob(str(config.storage.knowledge_base_dir / "*.pdf")))
+        Process:
+        1. Set status=BUILDING in LATEST.json
+        2. Upload index.faiss and metadata.pkl to fixed paths
+        3. Set status=READY in LATEST.json
+        4. If any step fails, set status=FAILED with error_message
 
-    logger.info("Found %d PDF files", len(pdf_files))
-    for pdf in pdf_files:
-        logger.info("  - %s", os.path.basename(pdf))
+        Args:
+            bucket_name: MinIO bucket name (default: "rag-index")
+            minio_endpoint: MinIO endpoint (from env if not provided)
+            minio_port: MinIO port (from env if not provided)
+            minio_access_key: MinIO access key (from env if not provided)
+            minio_secret_key: MinIO secret key (from env if not provided)
+        """
+        if self.index is None:
+            raise ValueError("FAISS index must be built before saving to MinIO")
 
-    # Process all PDFs
-    all_chunks = []
-    for pdf_path in pdf_files:
-        logger.info("Processing: %s", os.path.basename(pdf_path))
-        chunks = parser.parse_pdf_to_chunks(pdf_path)
-        all_chunks.extend(chunks)
-        logger.info("  %d chunks", len(chunks))
+        if not self.error_store:
+            raise ValueError("Error store must be populated before saving to MinIO")
 
-    logger.info("=" * 70)
-    logger.info("TOTAL: %d chunks from %d PDFs", len(all_chunks), len(pdf_files))
-    logger.info("=" * 70)
+        logger.info("=" * 60)
+        logger.info("SAVING RAG INDEX TO MINIO")
+        logger.info("=" * 60)
 
-    # Ingest and index
-    embedder.ingest_and_index(all_chunks)
+        from utils.minio import get_minio_client, ensure_bucket_exists
 
-    return embedder
+        minio_client = get_minio_client(
+            minio_endpoint, minio_port, minio_access_key, minio_secret_key
+        )
+
+        # Ensure bucket exists
+        if ensure_bucket_exists(minio_client, bucket_name):
+            logger.info(f"Created MinIO bucket: {bucket_name}")
+
+        # Step 1: Set BUILDING status
+        pointer = {
+            "status": "BUILDING",
+            "error_message": None,
+        }
+        pointer_json = json.dumps(pointer)
+        minio_client.put_object(
+            bucket_name,
+            "LATEST.json",
+            io.BytesIO(pointer_json.encode()),
+            length=len(pointer_json),
+        )
+        logger.info("Set status: BUILDING")
+
+        try:
+            # Step 2: Save FAISS index to temp file first
+            with tempfile.NamedTemporaryFile(
+                delete=False, suffix=".faiss"
+            ) as tmp_index:
+                faiss.write_index(self.index, tmp_index.name)
+                tmp_index_path = tmp_index.name
+
+            try:
+                # Upload FAISS index to fixed path
+                minio_client.fput_object(bucket_name, "index.faiss", tmp_index_path)
+                index_size_mb = os.path.getsize(tmp_index_path) / (1024 * 1024)
+                logger.info(
+                    f"Uploaded FAISS index: index.faiss ({index_size_mb:.2f} MB)"
+                )
+
+                # Save metadata to temp file
+                metadata = {
+                    "error_store": self.error_store,
+                    "index_to_error_id": self.index_to_error_id,
+                    "model_name": self.model_name,
+                    "embedding_dim": self.embedding_dim,
+                    "total_errors": len(self.error_store),
+                }
+
+                with tempfile.NamedTemporaryFile(
+                    delete=False, suffix=".pkl"
+                ) as tmp_metadata:
+                    pickle.dump(metadata, tmp_metadata)
+                    tmp_metadata_path = tmp_metadata.name
+
+                try:
+                    # Upload metadata to fixed path
+                    minio_client.fput_object(
+                        bucket_name, "metadata.pkl", tmp_metadata_path
+                    )
+                    metadata_size_mb = os.path.getsize(tmp_metadata_path) / (
+                        1024 * 1024
+                    )
+                    logger.info(
+                        f"Uploaded metadata: metadata.pkl ({metadata_size_mb:.2f} MB)"
+                    )
+
+                    # Step 3: Set READY status
+                    pointer = {
+                        "status": "READY",
+                        "error_message": None,
+                        "total_errors": len(self.error_store),
+                        "model_name": self.model_name,
+                        "embedding_dim": self.embedding_dim,
+                    }
+                    pointer_json = json.dumps(pointer)
+                    minio_client.put_object(
+                        bucket_name,
+                        "LATEST.json",
+                        io.BytesIO(pointer_json.encode()),
+                        length=len(pointer_json),
+                    )
+
+                    logger.info("✓ RAG index saved to MinIO")
+                    logger.info("  Status: READY")
+                    logger.info(f"  Total errors: {len(self.error_store)}")
+                    logger.info(
+                        f"  Total storage: {index_size_mb + metadata_size_mb:.2f} MB"
+                    )
+
+                finally:
+                    # Cleanup temp metadata file
+                    if os.path.exists(tmp_metadata_path):
+                        os.unlink(tmp_metadata_path)
+
+            finally:
+                # Cleanup temp index file
+                if os.path.exists(tmp_index_path):
+                    os.unlink(tmp_index_path)
+
+        except Exception as e:
+            # Step 4: Set FAILED status on error
+            error_msg = str(e)[:500]  # Limit error message length
+            logger.error(f"Failed to save RAG index to MinIO: {e}")
+
+            pointer = {
+                "status": "FAILED",
+                "error_message": error_msg,
+            }
+            pointer_json = json.dumps(pointer)
+            minio_client.put_object(
+                bucket_name,
+                "LATEST.json",
+                io.BytesIO(pointer_json.encode()),
+                length=len(pointer_json),
+            )
+
+            logger.error(f"Set status: FAILED (error: {error_msg})")
+            raise
 
 
-if __name__ == "__main__":
-    embedder = main()
+# main() function removed - use rag_init_pipeline.py for production index building
+# This file is now a library module, not a standalone script

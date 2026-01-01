@@ -55,27 +55,6 @@ spec:
                 sleep 3
               done
               echo "Phoenix service is ready!"
-        {{- if .Values.rag.enabled }}
-        - name: wait-for-embedding
-          image: curlimages/curl:latest
-          command:
-            - sh
-            - -c
-            - |
-              echo "Waiting for embedding service to be ready..."
-              EMBEDDING_URL="${EMBEDDINGS_LLM_URL}/health"
-              until curl -f -s "$EMBEDDING_URL" > /dev/null; do
-                echo "Still waiting for embedding service at $EMBEDDING_URL..."
-                sleep 5
-              done
-              echo "Embedding service is ready!"
-          env:
-            - name: EMBEDDINGS_LLM_URL
-              valueFrom:
-                configMapKeyRef:
-                  name: {{ include "backend.fullname" . }}-config
-                  key: EMBEDDINGS_LLM_URL
-        {{- end }}
       containers:
         - name: init-pipeline
           {{- with .Values.securityContext }}
@@ -88,9 +67,9 @@ spec:
             - sh
             - -c
             - |
-              python init_pipeline.py && touch /init-sync/done
-          {{- if .Values.env }}
+              {{ .Values.initCommand }}
           env:
+          {{- if .Values.env }}
             {{- toYaml .Values.env | nindent 12 }}
           {{- end }}
           envFrom:
@@ -107,10 +86,6 @@ spec:
           volumeMounts:
             - name: init-sync
               mountPath: /init-sync
-          {{- if .Values.rag.enabled }}
-            - name: rag-data
-              mountPath: {{ .Values.rag.pvcMountPath }}
-          {{- end }}
           {{- with .Values.volumeMounts }}
             {{- toYaml . | nindent 12 }}
           {{- end }}
@@ -124,6 +99,7 @@ spec:
               while [ ! -f /init-sync/done ]; do
                 sleep 5
               done
+              echo "Backend init job pipeline completed successfully!"
               echo "Init complete, scaling deployment to 1 replica..."
               oc scale deployment {{ include "backend.fullname" . }} --replicas=1 -n {{ .Release.Namespace }}
               echo "Deployment scaled successfully!"
@@ -133,11 +109,6 @@ spec:
       volumes:
         - name: init-sync
           emptyDir: {}
-      {{- if .Values.rag.enabled }}
-        - name: rag-data
-          persistentVolumeClaim:
-            claimName: {{ include "backend.fullname" . }}-rag-data
-      {{- end }}
       {{- with .Values.volumes }}
         {{- toYaml . | nindent 8 }}
       {{- end }}

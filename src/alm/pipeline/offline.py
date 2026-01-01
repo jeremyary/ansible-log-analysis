@@ -48,16 +48,40 @@ async def _process_alert(label: str, log_entry: LogEntry) -> Tuple[str, GrafanaA
     return label, convert_state_to_grafana_alert(GrafanaAlertState(**result_state))
 
 
-async def training_pipeline(restart_db=True):
+async def training_pipeline_prepare(restart_db=True, load_alerts_from_db=False):
+    """
+    Prepare pipeline by running steps that don't require RAG service.
+    This includes database initialization, loading alerts, and clustering logs.
+
+    Returns:
+        Tuple of (log_entries, cluster_labels, unique_cluster) for later processing.
+    """
     if restart_db:
         await init_tables(delete_tables=True)
 
     # Load log entries
     log_entries = await load_log_entries()
 
-    # Cluster logs
+    # Cluster logs (loads sentence transformer model and generates embeddings)
     cluster_labels, unique_cluster = cluster_logs(log_entries)
 
+    return log_entries, cluster_labels, unique_cluster
+
+
+async def training_pipeline_process(
+    log_entries: List[LogEntry],
+    cluster_labels: List[str],
+    unique_cluster: Dict[str, LogEntry],
+):
+    """
+    Process alerts through the graph (requires RAG service to be ready).
+    This step uses the RAG service for retrieving context from the knowledge base.
+
+    Args:
+        log_entries: List of all log entries to process
+        cluster_labels: Cluster labels for each log entry
+        unique_cluster: Dictionary mapping cluster labels to unique log entries
+    """
     # Process all unique cluster alerts in parallel
     results = await asyncio.gather(
         *[
@@ -82,3 +106,18 @@ async def training_pipeline(restart_db=True):
     await asyncio.gather(*[_add_or_update_alert(alert) for alert in alerts])
     elapsed_time = time.time() - start_time
     logger.info("database alerts added - Time: %.2fs", elapsed_time)
+
+
+async def training_pipeline(restart_db=True, load_alerts_from_db=False):
+    """
+    Run the complete training pipeline.
+
+    This function maintains backward compatibility by calling both preparation
+    and processing steps in sequence. For optimized parallel execution with
+    RAG service startup, use training_pipeline_prepare() and training_pipeline_process()
+    separately.
+    """
+    log_entries, cluster_labels, unique_cluster = await training_pipeline_prepare(
+        restart_db, load_alerts_from_db
+    )
+    await training_pipeline_process(log_entries, cluster_labels, unique_cluster)

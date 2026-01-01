@@ -11,7 +11,6 @@ image:
   # This sets the pull policy for images.
   pullPolicy: Always
   # Overrides the image tag whose default is the chart appVersion.
-  # Use 'rag-v1' for RAG-enabled version, or 'latest' for most recent
   tag: "latest"
 
 # This is for the secrets for pulling an image from a private repository more information can be found here: https://kubernetes.io/docs/tasks/configure-pod-container/pull-image-private-registry/
@@ -92,6 +91,8 @@ resources:
     cpu: 500m
     memory: 1Gi
     ephemeral-storage: 2Gi
+
+initCommand: "python backend_init_pipeline.py && touch /init-sync/done"
 
 initResources:
   limits:
@@ -209,6 +210,15 @@ config:
     sentenceTransformerModelName: "Qwen/Qwen3-Embedding-0.6B"
     algorithm: "meanshift"
     tmpClusterModelPath: "clustering_model.joblib"
+  
+  # RAG query configuration (how backend queries RAG service)
+  rag:
+    # Number of top candidates to retrieve from FAISS
+    topK: 4
+    # Number of final results to return to the agent
+    topN: 1
+    # Minimum similarity threshold (0-1)
+    similarityThreshold: 0.6
 
 # RBAC configuration
 rbac:
@@ -231,45 +241,3 @@ rbac:
 postgresql:
   # Whether to wait for PostgreSQL to be ready before starting the main container
   waitForReady: true
-
-# RAG (Retrieval Augmented Generation) configuration
-rag:
-  # Enable or disable RAG functionality
-  enabled: true
-  
-  # Embedding model configuration
-  # NOTE: API credentials (apiKey, apiUrl, modelName) are provided during 'make install'
-  # and stored in the 'model-secret' Kubernetes secret
-  embedding:
-    # Model is hardcoded to nomic-ai/nomic-embed-text-v1.5 (no config needed)
-    # Service URL defaults to http://alm-embedding:8080 (local cluster service)
-    apiUrl: "http://alm-embedding:8080"  # TEI service URL (defaults to local cluster service)
-    port: 8080  # Port for the embedding service (TEI)
-  
-  # Data paths
-  dataDir: "/app/data/rag"
-  knowledgeBaseDir: "/app/data/rag/knowledge_base"
-  # PVC mount path (mounted directly at /app/data/rag)
-  pvcMountPath: "/app/data/rag"
-  
-  # Persistence configuration for RAG index storage
-  persistence:
-    # Storage size for RAG index and metadata
-    size: "2Gi"
-    # Access mode: ReadWriteOnce (RWO) is used because:
-    # 1. Init job writes the index once
-    # 2. Backend pods only read (never write)
-    # 3. AWS EBS (gp3-csi) only supports RWO
-    # Note: For RWO, all backend pods must be scheduled on the same node as the PVC
-    accessMode: "ReadWriteOnce"
-    # Storage class (leave empty for default)
-    storageClassName: ""
-  
-  # Query configuration
-  query:
-    # Number of top candidates to retrieve from FAISS
-    topK: 4
-    # Number of final results to return to the agent
-    topN: 1
-    # Minimum similarity threshold (0-1)
-    similarityThreshold: 0.6
