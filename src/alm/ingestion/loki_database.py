@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+import asyncio
 from datetime import datetime, timedelta
 from typing import List, Dict
 import os
@@ -34,11 +35,13 @@ class LokiDataLoader(DataLoader):
         start_time: datetime = datetime.now() - timedelta(hours=1),
         end_time: datetime = datetime.now(),
         limit: int = 2000,
+        max_retries: int = 12 * 2,
     ):
         self.query = query
         self.end_time = end_time
         self.start_time = start_time
         self.limit = limit
+        self.max_retries = max_retries
 
     async def _load(self) -> Dict:
         """
@@ -59,34 +62,40 @@ class LokiDataLoader(DataLoader):
             "end": end_ns,
             "limit": self.limit,
         }
-        timeout = httpx.Timeout(30.0, connect=10.0)  # 30s read/write, 10s connect
+        timeout = httpx.Timeout(30.0, connect=10.0)
 
-        try:
-            async with httpx.AsyncClient(timeout=timeout) as client:
-                response = await client.get(endpoint, params=params)
-                response.raise_for_status()
+        last_error: Exception | None = None
 
-            return response.json()
-
-        except httpx.TimeoutException as e:
-            logger.error("Request to Loki timed out: %s", e)
-            raise httpx.TimeoutException("Request to Loki timed out") from e
-        except httpx.HTTPStatusError as e:
-            logger.error(
-                "Loki returned error status %s: %s",
-                e.response.status_code,
-                e.response.text[:500],  # Log first 500 chars to avoid huge logs
-            )
-            raise
-        except httpx.RequestError as e:
-            logger.error("Failed to reach Loki: %s", e)
-            raise httpx.RequestError(f"Failed to reach Loki: {e}") from e
-        except ValueError as e:  # JSON decode error
-            logger.error("Invalid JSON response from Loki: %s", e)
-            raise ValueError("Invalid JSON response from Loki") from e
-        except Exception as e:
-            logger.error("Failed to load data from Loki: %s", e)
-            raise Exception(f"Failed to load data from Loki: {e}") from e
+        for attempt in range(self.max_retries + 1):
+            try:
+                async with httpx.AsyncClient(timeout=timeout) as client:
+                    response = await client.get(endpoint, params=params)
+                    response.raise_for_status()
+                return response.json()
+            except (
+                httpx.TimeoutException,
+                httpx.RequestError,
+                httpx.HTTPStatusError,
+            ) as e:
+                last_error = e
+                logger.warning(
+                    "Loki request failed (attempt %d/%d): %s",
+                    attempt + 1,
+                    self.max_retries + 1,
+                    e,
+                )
+                if attempt < self.max_retries:
+                    await asyncio.sleep(5 * attempt)
+            except Exception as e:
+                last_error = e
+                logger.error(
+                    "Loki request failed (attempt %d/%d): %s",
+                    attempt + 1,
+                    self.max_retries + 1,
+                    e,
+                )
+                raise e
+        raise last_error  # type: ignore
 
     def _transform(self, raw_data: Dict) -> List[LogEntry]:
         """
