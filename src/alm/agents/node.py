@@ -10,7 +10,6 @@ from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from alm.agents.output_scheme import (
     SummarySchema,
     ClassifySchema,
-    SuggestStepByStepSolutionSchema,
     RouterStepByStepSolutionSchema,
 )
 import numpy as np
@@ -90,9 +89,6 @@ async def suggest_step_by_step_solution(
     context: Optional[str] = None,
     streaming: bool = False,
 ):
-    llm_suggest_step_by_step_solution = llm.with_structured_output(
-        SuggestStepByStepSolutionSchema
-    )
     if context:
         user_msg = suggest_step_by_step_solution_with_context_user_message.format(
             context=context,
@@ -116,18 +112,9 @@ async def suggest_step_by_step_solution(
         },
     ]
     if streaming:
-        log_suggest_step_by_step_solution = await stream_with_fallback(llm, messages)
-        return log_suggest_step_by_step_solution
+        return await stream_with_fallback(llm, messages)
     else:
-        log_suggest_step_by_step_solution = (
-            await llm_suggest_step_by_step_solution.ainvoke(messages)
-        )
-
-        return (
-            log_suggest_step_by_step_solution.root_cause_analysis
-            + "\n\n"
-            + log_suggest_step_by_step_solution.step_by_step_solution
-        )
+        return await llm.ainvoke(messages).content
 
 
 def _embed_logs(logs: List[str]):
@@ -244,8 +231,6 @@ def _handle_outlaier_cluster(cluster_labels: np.ndarray):
     return cluster_labels
 
 
-# TODO export it to be service that is deployed once, and been called from diffrent api requests.
-# Deploy it as service.
 def train_embed_and_cluster_logs(
     logs: List[str],
     save_cluster_model: bool = True,
