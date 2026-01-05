@@ -21,6 +21,7 @@ class EmbeddingsConfig:
         # API URL can be overridden via environment variable, otherwise use default
         # Use 'or' logic to treat empty strings as "not set" and fall back to default
         self.api_url = (os.getenv("EMBEDDINGS_LLM_URL") or self.DEFAULT_API_URL).strip()
+        self.api_key = os.getenv("EMBEDDINGS_LLM_API_KEY", None)
 
     def validate(self):
         """Validate configuration."""
@@ -30,12 +31,15 @@ class EmbeddingsConfig:
             raise ValueError("API URL must be set")
 
     def __repr__(self):
-        return (
+        config_str = (
             f"EmbeddingsConfig(\n"
             f"  model_name={self.model_name}\n"
             f"  api_url={self.api_url}\n"
-            f")"
         )
+        if self.api_key:
+            config_str += f"  api_key={self.api_key[0:3]}********\n"
+        config_str += ")"
+        return config_str
 
 
 class StorageConfig:

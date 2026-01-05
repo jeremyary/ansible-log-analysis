@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import JSON
@@ -102,6 +102,17 @@ class LogLabels(BaseModel):
         default=LogStatus.OK, description="Status of the log"
     )
 
+    @pydantic.field_validator("database_timestamp", mode="before")
+    @classmethod
+    def convert_to_utc_datetime(cls, v):
+        if isinstance(v, datetime):
+            return v.replace(tzinfo=timezone.utc)
+        if isinstance(v, str):
+            from alm.tools import timestamp_to_utc_datetime
+
+            return timestamp_to_utc_datetime(v).replace(tzinfo=timezone.utc)
+        return v
+
 
 class LogEntry(BaseModel):
     """Represents a single log entry from Loki"""
@@ -115,13 +126,22 @@ class LogEntry(BaseModel):
     @pydantic.field_validator("timestamp", mode="before")
     @classmethod
     def convert_to_datetime(cls, v):
-        """Convert string timestamps to datetime if needed."""
+        """Parse timestamp (custom or ISO format)."""
         if v is None:
             return None
         if isinstance(v, datetime):
             return v
         if isinstance(v, str):
-            return datetime.strptime(v, "%A %d %B %Y  %H:%M:%S %z").replace(tzinfo=None)
+            # ISO format starts with digit: "2025-08-04T08:00:26"
+            # Custom format starts with letter: "Tuesday 05 August 2025..."
+            if v[0].isdigit():
+                from dateutil import parser as date_parser
+
+                return date_parser.parse(v).replace(tzinfo=None)
+            else:
+                return datetime.strptime(v, "%A %d %B %Y  %H:%M:%S %z").replace(
+                    tzinfo=None
+                )
         return v
 
 

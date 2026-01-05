@@ -50,10 +50,7 @@ start: stop ## 🚀 Start all services locally
 	@echo "   Waiting for PostgreSQL to be ready..."
 	@$(MAKE) -s phoenix
 	@$(MAKE) -s loki-stack
-	@$(MAKE) -s embedding & \
-	@$(MAKE) -s aap-mock & wait
-	@$(MAKE) -s minio
-	@$(MAKE) -s rag
+	@$(MAKE) -s rag-stack & $(MAKE) -s aap-mock & wait
 	@$(MAKE) -s backend
 	@$(MAKE) -s ui
 	@$(MAKE) -s annotation
@@ -77,17 +74,9 @@ loki-stack: ## 📊 Start Loki stack (Loki, Loki MCP Server, Grafana, Promtail)
 	@echo "   Starting Loki stack (Loki, Loki MCP Server, Grafana, Promtail)..."
 	@$(COMPOSE_CMD) -f compose.yaml up -d loki loki-mcp-server grafana promtail
 
-embedding: ## 🤖 Start Embedding Service (TEI)
-	@echo "   Starting Embedding Service (TEI)..."
-	@$(COMPOSE_CMD) -f compose.yaml up -d alm-embedding
-
-minio: ## 📦 Start MinIO (Object Storage for RAG index)
-	@echo "   Starting MinIO..."
-	@$(COMPOSE_CMD) -f compose.yaml up -d minio
-
-rag: ## 🔍 Start RAG Service
-	@echo "   Starting RAG Service..."
-	@$(COMPOSE_CMD) -f compose.yaml up -d alm-rag
+rag-stack: ## 🔍 Start RAG stack (Embedding, MinIO, RAG Service)
+	@echo "   Starting RAG stack (Embedding, MinIO, RAG Service)..."
+	@$(COMPOSE_CMD) -f compose.yaml up -d alm-embedding minio alm-rag
 	@echo "   ⚠️  Note: RAG service will poll MinIO for index"
 	@echo "   It will become ready once index is available (after init job runs)"
 

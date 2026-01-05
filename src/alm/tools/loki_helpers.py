@@ -383,14 +383,20 @@ def merge_loki_streams(streams: List[Dict], direction: str = DEFAULT_DIRECTION) 
             stream_labels = stream_data.get("stream", {})
             values = stream_data.get("values", [])
 
+            # Extract real_timestamp from structured metadata (if available)
+            real_timestamp = stream_labels.pop("real_timestamp", None)
+
             # If direction is backward, reverse the values to get oldest-first
             if direction == DIRECTION_BACKWARD:
                 values = reversed(values)
 
             # Yield LogEntry objects
             for entry in values:
+                # Set database_timestamp to Loki's ingestion timestamp
+                stream_labels["database_timestamp"] = entry[0]
+
                 yield LogEntry(
-                    timestamp=entry[0],
+                    timestamp=real_timestamp,  # Real log timestamp from content
                     log_labels=LogLabels(**stream_labels),
                     message=entry[1],
                 )
@@ -402,7 +408,7 @@ def merge_loki_streams(streams: List[Dict], direction: str = DEFAULT_DIRECTION) 
         # heapq.merge expects sorted iterables and merges them efficiently
         merged_logs = heapq.merge(
             *stream_iterators,
-            key=lambda log: float(log.timestamp),  # Sort by timestamp as float
+            key=lambda log: log.log_labels.database_timestamp.timestamp(),  # Sort by database timestamp as float
         )
 
         # Extend all_logs with this file's merged logs
