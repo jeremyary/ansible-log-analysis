@@ -47,11 +47,14 @@ class EmbeddingClient:
         self,
         model_name: Optional[str] = None,
         api_url: Optional[str] = None,
+        api_key: Optional[str] = None,
     ):
         # Use hardcoded defaults from config
         self.model_name = model_name or config.embeddings.model_name
         self.api_url = api_url or config.embeddings.api_url
-
+        self.api_key = (
+            api_key or config.embeddings.api_key
+        )  # Relevant for remote embeddings API calls
         if not self.api_url:
             raise ValueError(
                 "api_url is required. "
@@ -120,6 +123,8 @@ class EmbeddingClient:
         headers = {
             "Content-Type": "application/json",
         }
+        if self.api_key:
+            headers["Authorization"] = f"Bearer {self.api_key}"
 
         # Ensure URL ends with /embeddings for OpenAI format
         url = self.api_url
@@ -206,6 +211,7 @@ class AnsibleErrorEmbedder:
         self,
         model_name: Optional[str] = None,
         api_url: Optional[str] = None,
+        api_key: Optional[str] = None,
         index_path: Optional[str] = None,
         metadata_path: Optional[str] = None,
     ):
@@ -221,6 +227,9 @@ class AnsibleErrorEmbedder:
         # Use config values as defaults (model is hardcoded in config)
         self.model_name = model_name or config.embeddings.model_name
         self.api_url = api_url or config.embeddings.api_url
+        self.api_key = (
+            api_key or config.embeddings.api_key
+        )  # Relevant for remote embeddings API calls
         self.index_path = index_path or config.storage.index_path
         self.metadata_path = metadata_path or config.storage.metadata_path
 
@@ -231,7 +240,9 @@ class AnsibleErrorEmbedder:
             )
 
         # Initialize embedding client (no API key needed for TEI)
-        self.client = EmbeddingClient(model_name=self.model_name, api_url=self.api_url)
+        self.client = EmbeddingClient(
+            model_name=self.model_name, api_url=self.api_url, api_key=self.api_key
+        )
         self.embedding_dim = self.client.embedding_dim
 
         self.index = None
