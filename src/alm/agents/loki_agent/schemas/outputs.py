@@ -14,7 +14,7 @@ from alm.agents.loki_agent.constants import (
     LOG_CONTEXT_SEPARATOR_WIDTH,
     NANOSECONDS_PER_SECOND,
 )
-from alm.models import LogEntry
+from alm.models import LogEntry, DetectedLevel
 from alm.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -103,18 +103,14 @@ def build_log_context(logs: List["LogEntry"]) -> str:
         logger.warning("No logs found to build context from.")
         return ""
 
-    # Group logs by labels (keeping only filename, cluster_name and service_name)
+    # Group logs by labels (excluding detected_level to keep all logs from same file together)
     logs_by_labels = defaultdict(list)
     for log in logs:
-        # Keep only specific labels for grouping
+        # Convert labels dict to a string key for grouping, excluding detected_level
         labels_dict = log.log_labels.model_dump(exclude_none=True)
-        # Filter to keep only the labels we want
-        wanted_labels = {
-            k: v
-            for k, v in labels_dict.items()
-            if k in ["filename", "service_name", "cluster_name"]
-        }
-        labels_key = ", ".join([f"{k}={v}" for k, v in sorted(wanted_labels.items())])
+        # Remove detected_level from grouping key
+        labels_dict.pop("detected_level", None)
+        labels_key = ", ".join([f"{k}={v}" for k, v in sorted(labels_dict.items())])
         logs_by_labels[labels_key].append(log)
 
     # Build context with grouped logs (preserving natural order from Loki)
@@ -130,8 +126,14 @@ def build_log_context(logs: List["LogEntry"]) -> str:
 
         # Add logs for this label group
         for log in label_logs:
-            # Abandon database_timestamp since it's the generated timestamp (ingested timestamp) and used only for loki query,
+            # Add log level inline if available
+            log_level = (
+                log.log_labels.detected_level.value.upper()
+                if log.log_labels.detected_level
+                else DetectedLevel.UNKNOWN.value.upper()
+            )
+            # Abandon timestamp since it's the generated timestamp (ingested timestamp) and used only for loki query,
             # the real timestamp is in the log message itself
-            context_parts.append(log.message)
+            context_parts.append(f"{log_level} - {log.message}")
 
     return "\n".join(context_parts)

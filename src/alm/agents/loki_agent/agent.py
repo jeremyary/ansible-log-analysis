@@ -6,7 +6,7 @@ import json
 from typing import Dict, Any, Optional
 
 from langchain.agents import create_agent
-from langchain_core.messages import ToolMessage, HumanMessage
+from langchain_core.messages import ToolMessage
 
 from alm.agents.loki_agent.constants import (
     CONTEXT_TRUNCATE_LENGTH,
@@ -14,7 +14,7 @@ from alm.agents.loki_agent.constants import (
     LOKI_AGENT_SYSTEM_PROMPT_PATH,
 )
 from alm.agents.loki_agent.schemas import LogToolOutput, LokiAgentOutput, ToolStatus
-from alm.llm import get_llm_support_tool_calling
+from alm.llm import get_llm
 from alm.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -40,8 +40,7 @@ class LokiQueryAgent:
         # Import tools here to avoid circular dependency
         from alm.tools import LOKI_STATIC_TOOLS, create_log_lines_above_tool
 
-        # Use LLM with tool calling support for this agent
-        self.llm = get_llm_support_tool_calling()
+        self.llm = get_llm()
 
         # Build tools list: static tools + closure-created tool
         self.tools = [
@@ -82,7 +81,6 @@ class LokiQueryAgent:
             LokiAgentOutput containing the query results and metadata
         """
         result = None
-        excluded_keys = ["logMessage"]
         try:
             # Enhance the user request with context if available
             enhanced_request = user_request
@@ -102,8 +100,8 @@ class LokiQueryAgent:
                 # Add all other fields generically
                 for key, value in context.items():
                     if (
-                        key not in excluded_keys and value
-                    ):  # Skip excluded keys and empty values
+                        key != "logMessage" and value
+                    ):  # Skip logMessage (already added) and empty values
                         # Convert camelCase to Title Case with spaces
                         formatted_key = (
                             "".join([" " + c if c.isupper() else c for c in key])
@@ -123,7 +121,7 @@ class LokiQueryAgent:
 
             # Execute the agent
             result = await self.agent.ainvoke(
-                {"messages": [HumanMessage(content=enhanced_request)]}
+                {"messages": [{"role": "user", "content": enhanced_request}]}
             )
 
             # Extract tool results from ToolMessages
@@ -139,9 +137,6 @@ class LokiQueryAgent:
                     # Parse the tool result should be JSON representation of LogToolOutput
                     log_tool_output_object = LogToolOutput.model_validate_json(
                         tool_result
-                    )
-                    logger.debug(
-                        f"Final executed LogQL query: {log_tool_output_object.query}"
                     )
 
                     return LokiAgentOutput(
