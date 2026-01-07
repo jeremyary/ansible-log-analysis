@@ -471,7 +471,7 @@ def generate_clusters_html(
                                         <span style="font-size: 1rem;">🔧</span>
                                         <strong style="color: #f1f5f9; font-size: 0.95rem;">Solution</strong>
                                     </div>
-                                    <div style="background: rgba(16, 185, 129, 0.1); color: #e2e8f0; border: 1px solid #10b981; border-radius: 0.375rem; padding: 1rem; font-size: 0.8rem; line-height: 1.5; overflow-y: auto;">
+                                    <div class="markdown-content" style="background: rgba(16, 185, 129, 0.1); color: #e2e8f0; border: 1px solid #10b981; border-radius: 0.375rem; padding: 1rem; font-size: 0.8rem; line-height: 1.5;">
                                         {step_by_step_solution_html}
                                     </div>
                                 </div>
@@ -797,7 +797,7 @@ def generate_logs_html(alerts_data: List[Dict[str, Any]]) -> str:
                         <span style="font-size: 1.25rem;">🔧</span>
                         <strong style="color: #f1f5f9; font-size: 1.1rem;">Step-by-Step Solution</strong>
                     </div>
-                    <div style="background: rgba(16, 185, 129, 0.1); color: #e2e8f0; border: 2px solid #10b981; border-radius: 0.5rem; padding: 1.5rem; font-size: 0.875rem; line-height: 1.6; position: relative;">
+                    <div class="markdown-content" style="background: rgba(16, 185, 129, 0.1); color: #e2e8f0; border: 2px solid #10b981; border-radius: 0.5rem; padding: 1.5rem; font-size: 0.875rem; line-height: 1.6; position: relative;">
                         <div style="position: absolute; top: 0.5rem; right: 0.5rem; background: #10b981; color: white; padding: 0.25rem 0.5rem; border-radius: 0.375rem; font-size: 0.75rem; font-weight: 600;">SOLUTION</div>
                         {step_by_step_solution_html}
                     </div>
@@ -1187,6 +1187,75 @@ def create_interface():
     .log-details-content em {
         color: #cbd5e1 !important;
         font-style: italic !important;
+    }
+    
+    /* Markdown content styling for solutions */
+    .markdown-content h1,
+    .markdown-content h2,
+    .markdown-content h3,
+    .markdown-content h4,
+    .markdown-content h5,
+    .markdown-content h6 {
+        color: #f1f5f9 !important;
+        margin: 1rem 0 0.5rem 0 !important;
+        font-weight: 600 !important;
+    }
+    
+    .markdown-content p {
+        margin: 0.5rem 0 !important;
+    }
+    
+    .markdown-content ul,
+    .markdown-content ol {
+        margin: 0.5rem 0 !important;
+        padding-left: 1.5rem !important;
+    }
+    
+    .markdown-content li {
+        margin: 0.25rem 0 !important;
+    }
+    
+    .markdown-content code {
+        background: rgba(15, 23, 42, 0.9) !important;
+        color: #fbbf24 !important;
+        padding: 0.2rem 0.4rem !important;
+        border-radius: 0.25rem !important;
+        font-family: 'JetBrains Mono', 'Monaco', 'Menlo', monospace !important;
+        font-size: 0.85em !important;
+        border: 1px solid #475569 !important;
+    }
+    
+    .markdown-content pre {
+        background: rgba(15, 23, 42, 0.95) !important;
+        border: 2px solid #475569 !important;
+        border-radius: 0.5rem !important;
+        padding: 1rem !important;
+        margin: 0.75rem 0 !important;
+        overflow-x: auto !important;
+    }
+    
+    .markdown-content pre code {
+        background: transparent !important;
+        border: none !important;
+        padding: 0 !important;
+        color: #e2e8f0 !important;
+        font-size: 0.85rem !important;
+        line-height: 1.5 !important;
+        display: block !important;
+        white-space: pre !important;
+    }
+    
+    .markdown-content strong {
+        color: #f1f5f9 !important;
+        font-weight: 600 !important;
+    }
+    
+    .markdown-content blockquote {
+        border-left: 3px solid #10b981 !important;
+        background: rgba(16, 185, 129, 0.05) !important;
+        padding: 0.5rem 1rem !important;
+        margin: 0.5rem 0 !important;
+        border-radius: 0 0.25rem 0.25rem 0 !important;
     }
     
     /* Footer styling */
