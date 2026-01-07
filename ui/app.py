@@ -37,7 +37,7 @@ def extract_unique_label_keys(alerts: List[Dict[str, Any]]) -> List[str]:
     """Extract unique label keys from all alerts."""
     label_keys = set()
     for alert in alerts:
-        labels = alert.get("labels", {})
+        labels = alert.get("log_labels", {})
         label_keys.update(labels.keys())
     return sorted(list(label_keys))
 
@@ -48,7 +48,7 @@ def extract_unique_label_values(
     """Extract unique values for a specific label key from all alerts."""
     label_values = set()
     for alert in alerts:
-        labels = alert.get("labels", {})
+        labels = alert.get("log_labels", {})
         if label_key in labels:
             label_values.add(labels[label_key])
     return sorted(list(label_values))
@@ -63,7 +63,7 @@ def filter_alerts_by_label(
 
     filtered_alerts = []
     for alert in alerts:
-        labels = alert.get("labels", {})
+        labels = alert.get("log_labels", {})
         if labels.get(label_key) == label_value:
             filtered_alerts.append(alert)
 
@@ -389,10 +389,10 @@ def generate_clusters_html(
 
                     # Format labels
                     labels_html = ""
-                    if log_full_alert.get("labels"):
+                    if log_full_alert.get("log_labels"):
                         labels_list = [
                             f'<span style="display: inline-block; background: rgba(30, 41, 59, 0.8); color: #e2e8f0; border: 1px solid #475569; padding: 0.25rem 0.5rem; border-radius: 0.375rem; margin: 0.125rem; font-size: 0.875rem;"><strong style="color: #cbd5e1;">{k}:</strong> {v}</span>'
-                            for k, v in log_full_alert.get("labels", {}).items()
+                            for k, v in log_full_alert.get("log_labels", {}).items()
                         ]
                         labels_html = "".join(labels_list)
                     else:
@@ -692,10 +692,10 @@ def generate_logs_html(alerts_data: List[Dict[str, Any]]) -> str:
 
         # Format labels
         labels_html = ""
-        if full_alert.get("labels"):
+        if full_alert.get("log_labels"):
             labels_list = [
                 f'<span style="display: inline-block; background: rgba(30, 41, 59, 0.8); color: #e2e8f0; border: 1px solid #475569; padding: 0.25rem 0.5rem; border-radius: 0.375rem; margin: 0.125rem; font-size: 0.875rem;"><strong style="color: #cbd5e1;">{k}:</strong> {v}</span>'
-                for k, v in full_alert.get("labels", {}).items()
+                for k, v in full_alert.get("log_labels", {}).items()
             ]
             labels_html = "".join(labels_list)
         else:
