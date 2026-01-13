@@ -218,3 +218,4 @@ data/*.pkl
 .cursor/
 .vscode/
 *.secret
+.deepeval/
