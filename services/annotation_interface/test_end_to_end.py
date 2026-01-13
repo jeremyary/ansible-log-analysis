@@ -8,13 +8,6 @@ import os
 from deepeval.models import LocalModel
 from deepeval.test_case import LLMTestCase
 from typing import List
-import logging
-
-logger = logging.getLogger(__name__)
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(asctime)s - annotation interface - %(name)s - %(levelname)s - %(message)s",
-)
 
 llm_vllm = LocalModel(
     model=os.environ.get("OPENAI_MODEL"),
@@ -113,7 +106,11 @@ def run_evaluation(df: pd.DataFrame):
     results = evaluate(
         test_cases=test_cases,
         metrics=[root_cause_metric, same_steps_metric],
-        display_config=DisplayConfig(print_results=False),
+        display_config=DisplayConfig(
+            print_results=False,
+            show_indicator=False,
+            verbose_mode=False,
+        ),
         error_config=ErrorConfig(ignore_errors=True),
     )
 

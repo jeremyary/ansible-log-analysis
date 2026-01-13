@@ -23,6 +23,10 @@ logging.basicConfig(
     format="%(asctime)s - annotation interface - %(name)s - %(levelname)s - %(message)s",
 )
 
+# Suppress verbose logging from third-party libraries
+logging.getLogger("deepeval").setLevel(logging.WARNING)
+logging.getLogger("httpx").setLevel(logging.WARNING)
+
 
 class DataAnnotationApp:
     def __init__(self, feedback_dir: str = "data/feedback"):
@@ -490,7 +494,6 @@ class DataAnnotationApp:
             )
 
         df = pd.DataFrame(df_data)
-        print(df.head())
         try:
             logger.info(f"Running evaluation on {len(df)} entries...")
             results_df = run_evaluation(df)
