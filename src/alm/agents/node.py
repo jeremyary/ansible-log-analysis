@@ -3,7 +3,13 @@ from alm.llm import stream_with_fallback
 from sklearn.base import ClusterMixin
 import os
 from sentence_transformers import SentenceTransformer
-from sklearn.cluster import DBSCAN, MeanShift, AgglomerativeClustering
+from sklearn.cluster import (
+    DBSCAN,
+    MeanShift,
+    AgglomerativeClustering,
+    HDBSCAN,
+    estimate_bandwidth,
+)
 from sklearn.metrics.pairwise import cosine_distances
 import joblib
 from langchain_openai import ChatOpenAI
@@ -141,9 +147,14 @@ def _cluster_logs(embeddings: np.ndarray) -> Tuple[ClusterMixin, np.ndarray]:
         cluster_model = DBSCAN(eps=0.3, min_samples=2, metric="precomputed")
         cluster_labels = cluster_model.fit_predict(distance_matrix)
 
+    elif algorithm.lower() == "hdbscan":
+        cluster_model = HDBSCAN(min_cluster_size=2, metric="cosine")
+        cluster_labels = cluster_model.fit_predict(embeddings)
+
     elif algorithm.lower() == "meanshift":
         # Mean Shift - Automatically determines number of clusters
-        cluster_model = MeanShift(bandwidth=None)  # Auto-estimate bandwidth
+        bandwidth = estimate_bandwidth(embeddings, quantile=0.2)
+        cluster_model = MeanShift(bandwidth=bandwidth)  # Auto-estimate bandwidth
         cluster_labels = cluster_model.fit_predict(embeddings)
 
     elif algorithm.lower() == "agglomerative":
@@ -212,10 +223,14 @@ def train_embed_and_cluster_logs(
     """
     if not logs:
         return []
+    import pandas as pd
 
     # Embed logs
     embeddings = _embed_logs(logs)
-
+    pd.DataFrame(
+        zip([embedding.tolist() for embedding in embeddings], logs),
+        columns=["embedding", "log"],
+    ).to_csv("embeddings.csv", index=False)
     # Train clustering model
     cluster_model, cluster_labels = _cluster_logs(embeddings)
 

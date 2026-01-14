@@ -25,13 +25,13 @@ def cluster_logs(
     log_entries: List[LogEntry],
 ) -> Tuple[List[str], Dict[str, LogEntry]]:
     """Cluster logs and return unique alerts per cluster."""
-    cluster_labels = train_embed_and_cluster_logs(
-        [log_entry.message for log_entry in log_entries]
-    )
-
+    messages = [log_entry.message for log_entry in log_entries]
+    cluster_labels = train_embed_and_cluster_logs(messages)
     unique_cluster = {
         label: log_entry for log_entry, label in zip(log_entries, cluster_labels)
     }
+
+    logger.info(f"found {len(unique_cluster)} log templates")
     return cluster_labels, unique_cluster
 
 
