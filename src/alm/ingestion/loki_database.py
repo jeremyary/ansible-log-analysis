@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 import asyncio
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Tuple
 import os
 
 import httpx
@@ -32,16 +32,28 @@ class LokiDataLoader(DataLoader):
     def __init__(
         self,
         query: str = '{status=~"fatal|failed"}',
-        start_time: datetime = datetime.now() - timedelta(hours=1),
-        end_time: datetime = datetime.now(),
+        delta: timedelta = timedelta(hours=1),
         limit: int = 2000,
-        max_retries: int = 12 * 2,
+        max_retries: int = 12 * 3,
     ):
         self.query = query
-        self.end_time = end_time
-        self.start_time = start_time
         self.limit = limit
         self.max_retries = max_retries
+        self.delta = delta
+
+    def _refresh_time_window(self) -> Tuple[int, int]:
+        start_time = datetime.now() - self.delta
+        end_time = datetime.now()
+        return int(start_time.timestamp() * 1e9), int(end_time.timestamp() * 1e9)
+
+    def _build_params(self) -> Dict:
+        start_ns, end_ns = self._refresh_time_window()
+        return {
+            "query": self.query,
+            "start": start_ns,
+            "end": end_ns,
+            "limit": self.limit,
+        }
 
     async def _load(self) -> Dict:
         """
@@ -50,33 +62,38 @@ class LokiDataLoader(DataLoader):
         Returns:
             Dictionary containing the raw query results from Loki.
         """
-        # Convert to nanosecond timestamps (Loki uses nanoseconds)
-        start_ns = int(self.start_time.timestamp() * 1e9)
-        end_ns = int(self.end_time.timestamp() * 1e9)
 
         endpoint = f"{os.getenv('LOKI_URL')}/loki/api/v1/query_range"
 
-        params = {
-            "query": self.query,
-            "start": start_ns,
-            "end": end_ns,
-            "limit": self.limit,
-        }
         timeout = httpx.Timeout(30.0, connect=10.0)
 
         last_error: Exception | None = None
-
+        last_count: int | None = None
         for attempt in range(self.max_retries + 1):
             try:
                 async with httpx.AsyncClient(timeout=timeout) as client:
+                    params = self._build_params()
                     response = await client.get(endpoint, params=params)
                     response.raise_for_status()
-                # TODO FIXME tmp fix until alloy service is allive
-                await asyncio.sleep(15)
-                async with httpx.AsyncClient(timeout=timeout) as client:
-                    response = await client.get(endpoint, params=params)
-                    response.raise_for_status()
-                return response.json()
+                    data = response.json()
+                    streams = data.get("data", {}).get("result", [])
+                    current_count = sum(
+                        len(stream.get("values", [])) for stream in streams
+                    )
+                    logger.info(
+                        "Loki returned %d logs from %d streams",
+                        current_count,
+                        len(streams),
+                    )
+                    if (
+                        last_count is not None
+                        and current_count == last_count
+                        and current_count != 0
+                    ):
+                        return data
+                    last_count = current_count
+
+                    await asyncio.sleep(5)
             except (
                 httpx.TimeoutException,
                 httpx.RequestError,
