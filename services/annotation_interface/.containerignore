@@ -112,3 +112,4 @@ pids/
 # Temporary files
 tmp/
 temp/
+.deepeval/
