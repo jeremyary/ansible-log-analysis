@@ -3,7 +3,13 @@ from alm.llm import stream_with_fallback
 from sklearn.base import ClusterMixin
 import os
 from sentence_transformers import SentenceTransformer
-from sklearn.cluster import DBSCAN, MeanShift, AgglomerativeClustering, HDBSCAN
+from sklearn.cluster import (
+    DBSCAN,
+    MeanShift,
+    AgglomerativeClustering,
+    HDBSCAN,
+    estimate_bandwidth,
+)
 from sklearn.metrics.pairwise import cosine_distances
 import joblib
 from langchain_openai import ChatOpenAI
@@ -147,7 +153,8 @@ def _cluster_logs(embeddings: np.ndarray) -> Tuple[ClusterMixin, np.ndarray]:
 
     elif algorithm.lower() == "meanshift":
         # Mean Shift - Automatically determines number of clusters
-        cluster_model = MeanShift(bandwidth=None)  # Auto-estimate bandwidth
+        bandwidth = estimate_bandwidth(embeddings, quantile=0.2)
+        cluster_model = MeanShift(bandwidth=bandwidth)  # Auto-estimate bandwidth
         cluster_labels = cluster_model.fit_predict(embeddings)
 
     elif algorithm.lower() == "agglomerative":
