@@ -182,7 +182,11 @@ See the interface below:
 
 ### Minimum hardware requirements 
 
-Storage / PC of size <TODO>
+CPU: 3-4 cores  
+Memory: 10Gi  
+Storage: 50Gi-200Gi  
+- 50Gi for using the mock data  
+- For a large amount of logs, this needs to be increased
 
 ### Minimum software requirements
 
