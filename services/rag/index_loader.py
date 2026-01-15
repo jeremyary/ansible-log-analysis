@@ -66,6 +66,7 @@ class RAGIndexLoader:
         self.error_store: Dict[str, Dict[str, Any]] = {}
         self.index_to_error_id: Dict[int, str] = {}
         self._loaded = False
+        self.last_loaded_build_id: Optional[str] = None
 
     def check_index_ready(self) -> bool:
         """
@@ -105,6 +106,7 @@ class RAGIndexLoader:
             response = self.minio_client.get_object(self.bucket_name, "LATEST.json")
             pointer = json.loads(response.read().decode())
             status = pointer.get("status")
+            self.last_loaded_build_id = pointer.get("build_id")
 
             if status == "FAILED":
                 error_msg = pointer.get("error_message", "Unknown error")

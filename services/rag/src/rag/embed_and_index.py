@@ -16,6 +16,8 @@ Service URL defaults to http://alm-embedding:8080 (can be overridden via EMBEDDI
 """
 
 import os
+import time
+import uuid
 import pickle
 import numpy as np
 import requests
@@ -374,21 +376,24 @@ class AnsibleErrorEmbedder:
         for error_id, error_data in error_store.items():
             sections = error_data["sections"]
 
-            # Extract description and symptoms
+            # Extract title, description, and symptoms
+            title = (error_data.get("error_title") or "").strip()
             description = sections.get("description", "").strip()
             symptoms = sections.get("symptoms", "").strip()
 
-            # Skip errors without description or symptoms
-            if not description and not symptoms:
+            # Skip errors without title/description/symptoms
+            if not title and not description and not symptoms:
                 logger.warning(
-                    "Skipping error %s: No description or symptoms",
-                    error_data["error_title"],
+                    "Skipping error %s: No title, description, or symptoms",
+                    error_data.get("error_title", error_id),
                 )
                 skipped += 1
                 continue
 
             # Create composite text
             composite_parts = []
+            if title:
+                composite_parts.append(title)
             if description:
                 composite_parts.append(description)
             if symptoms:
@@ -411,7 +416,8 @@ class AnsibleErrorEmbedder:
         logger.debug("Created %d composite texts", len(composite_texts))
         if skipped > 0:
             logger.warning(
-                "Skipped %d errors (missing description and symptoms)", skipped
+                "Skipped %d errors (missing title, description, and symptoms)",
+                skipped,
             )
 
         if use_task_prefix:
@@ -625,10 +631,15 @@ class AnsibleErrorEmbedder:
         if ensure_bucket_exists(minio_client, bucket_name):
             logger.info(f"Created MinIO bucket: {bucket_name}")
 
+        build_id = str(uuid.uuid4())
+        build_ts = int(time.time())
+
         # Step 1: Set BUILDING status
         pointer = {
             "status": "BUILDING",
             "error_message": None,
+            "build_id": build_id,
+            "build_ts": build_ts,
         }
         pointer_json = json.dumps(pointer)
         minio_client.put_object(
@@ -689,6 +700,8 @@ class AnsibleErrorEmbedder:
                         "total_errors": len(self.error_store),
                         "model_name": self.model_name,
                         "embedding_dim": self.embedding_dim,
+                        "build_id": build_id,
+                        "build_ts": build_ts,
                     }
                     pointer_json = json.dumps(pointer)
                     minio_client.put_object(

@@ -3,6 +3,7 @@ RAG Service - FastAPI service for RAG queries.
 """
 
 import os
+import json
 from typing import Optional, List, Dict, Any
 import numpy as np
 from fastapi import FastAPI, HTTPException
@@ -109,7 +110,26 @@ async def poll_for_index():
         try:
             # Check if index is already loaded
             if index_loader is not None and index_loader.index is not None:
-                # Index is loaded, check periodically if it needs reloading
+                # Index is loaded, optionally check for rebuilds
+                force_rebuild = (
+                    os.getenv("RAG_FORCE_REBUILD", "false").lower() == "true"
+                )
+                if force_rebuild:
+                    try:
+                        response = index_loader.minio_client.get_object(
+                            index_loader.bucket_name, "LATEST.json"
+                        )
+                        pointer = json.loads(response.read().decode())
+                        latest_build_id = pointer.get("build_id")
+                        if (
+                            latest_build_id
+                            and latest_build_id != index_loader.last_loaded_build_id
+                        ):
+                            logger.info("Detected new RAG index build_id; reloading...")
+                            await index_loader.reload_index()
+                    except Exception as e:
+                        logger.warning("Failed to check latest RAG build_id: %s", e)
+
                 await asyncio.sleep(poll_interval)
                 continue
 
