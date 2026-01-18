@@ -17,12 +17,19 @@ import psycopg2
 from test_end_to_end import run_evaluation
 
 # Configure logger
-logger = logging.getLogger(__name__)
+# You can change this to your actual service name
+SERVICE_NAME = "annotation-interface"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - annotation interface - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s  %(levelname)-7s  "
+    f"[{SERVICE_NAME}]  "
+    "%(name)s  "
+    "%(filename)s:%(lineno)d  |  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+logger = logging.getLogger(__name__)
 # Suppress verbose logging from third-party libraries
 logging.getLogger("deepeval").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -37,6 +44,9 @@ class DataAnnotationApp:
         self.all_data = []  # Store all data before cluster filtering
         self.feedback_data = []
         self.show_cluster_sample = False  # Toggle state for cluster sampling
+        self.entry_index_map: Dict[
+            str, int
+        ] = {}  # (filename, logMessage) -> index for O(1) lookup
 
         # Evaluation results storage: dict keyed by entry index
         self.evaluation_results: Dict[int, Dict[str, Any]] = {}
@@ -110,6 +120,11 @@ class DataAnnotationApp:
                         "labels": labels if isinstance(labels, dict) else {},
                     }
                     self.all_data.append(data_entry)
+                    key = f"{data_entry['filename']}-{data_entry.get('logMessage')}"
+                    self.entry_index_map[key] = (
+                        len(self.all_data) - 1,
+                        data_entry.get("step_by_step_solution"),
+                    )
 
                 # Initialize data with all entries
                 self.data = self.all_data.copy()
@@ -123,12 +138,14 @@ class DataAnnotationApp:
             )
             self.all_data = []
             self.data = []
+            self.entry_index_map = {}
         except Exception as e:
             logger.error(
                 f"Error loading data from database table '{self.table_name}': {e}"
             )
             self.all_data = []
             self.data = []
+            self.entry_index_map = {}
 
     def load_feedback(self):
         """Load existing feedback data."""
@@ -151,12 +168,26 @@ class DataAnnotationApp:
         """Restore evaluation results from saved feedback data."""
         eval_count = 0
         success_count = 0
+        need_to_run_evaluation = False
 
         for entry in self.feedback_data:
             if "eval_metrics" in entry:
-                # Use index as the key (consistent with how get_current_entry looks up feedback)
-                entry_index = entry.get("index")
+                # Determine the index by filename and timestamp from labels
+                key = f"{entry.get('filename')}-{entry.get('logMessage')}"
+                entry_index, step_by_step_solution = self.entry_index_map.get(
+                    key, (None, None)
+                )
+                entry["index"] = entry_index
+                logger.debug(f"Entry index: {entry_index}")
                 if entry_index is not None:
+                    old_step_by_step_solution = entry.get("stepByStepSolution")
+                    old_entry_index = entry.get("index")
+                    entry["stepByStepSolution"] = step_by_step_solution
+                    if (
+                        old_step_by_step_solution != step_by_step_solution
+                        or old_entry_index != entry_index
+                    ):
+                        need_to_run_evaluation = True
                     self.evaluation_results[entry_index] = {
                         "success": entry.get("eval_success", False),
                         "metrics": entry.get("eval_metrics", []),
@@ -165,6 +196,11 @@ class DataAnnotationApp:
                     if entry.get("eval_success", False):
                         success_count += 1
 
+        if need_to_run_evaluation:
+            self.run_evaluation_on_feedback()
+        logger.info(f"Need to run evaluation: {need_to_run_evaluation}")
+        logger.info(f"Eval count: {eval_count}")
+        logger.info(f"Success count: {success_count}")
         if eval_count > 0:
             self.eval_summary = {
                 "total": eval_count,
@@ -473,6 +509,7 @@ class DataAnnotationApp:
                 f
                 for f in self.feedback_data
                 if f.get("golden_stepByStepSolution", "").strip()
+                and f.get("index") is not None
             ]
             if not entries_with_golden:
                 return (
@@ -646,22 +683,14 @@ class DataAnnotationApp:
         success = self.eval_summary.get("success", 0)
         percentage = (success / total * 100) if total > 0 else 0
 
-        # Color based on success rate
-        if percentage >= 80:
-            color = "#22c55e"  # green
-        elif percentage >= 50:
-            color = "#eab308"  # yellow
-        else:
-            color = "#ef4444"  # red
-
         return f"""
         <div style='padding: 16px; background-color: #1e293b; border: 1px solid #475569; 
                     border-radius: 8px; display: flex; align-items: center; gap: 20px;'>
-            <div style='font-size: 1.2em; font-weight: 600; color: {color};'>
+            <div style='font-size: 1.2em; font-weight: 600; color: #22c55e;'>
                 {success} / {total} tests passed ({percentage:.1f}%)
             </div>
             <div style='flex-grow: 1; background-color: #334155; border-radius: 4px; height: 8px;'>
-                <div style='width: {percentage}%; background-color: {color}; height: 100%; 
+                <div style='width: {percentage}%; background-color: #22c55e; height: 100%; 
                             border-radius: 4px; transition: width 0.3s;'></div>
             </div>
         </div>
@@ -749,6 +778,40 @@ def create_app():
 
     # Custom CSS for dark theme
     css = """
+    /* Standard container width - consistent across all elements */
+    .gradio-container {
+        max-width: 1200px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+        background-color: #0f172a !important;
+        box-sizing: border-box !important;
+    }
+    /* Ensure all child elements respect container width */
+    .gradio-container > * {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    .gradio-container .wrap,
+    .gradio-container .contain {
+        max-width: 100% !important;
+    }
+    /* Fix row and column widths */
+    .gradio-row {
+        max-width: 100% !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    .gradio-column {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
+    /* Ensure form elements don't overflow */
+    .gradio-container textarea,
+    .gradio-container input,
+    .gradio-container .prose {
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
     .summary-box {
         padding: 16px;
         border-radius: 8px;
@@ -767,12 +830,16 @@ def create_app():
         border-radius: 8px; 
         border: 1px solid #334155 !important;
         max-height: 420px;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
     .feedback-box {
         min-height: 200px;
         background-color: #1e293b !important;
         color: #e2e8f0 !important;
         border: 1px solid #475569 !important;
+        width: 100% !important;
+        box-sizing: border-box !important;
     }
     .nav-button {
         min-width: 60px;
@@ -791,6 +858,8 @@ def create_app():
     table {
         background-color: #1e293b !important;
         color: #e2e8f0 !important;
+        width: 100% !important;
+        table-layout: fixed !important;
     }
     th {
         background-color: #334155 !important;
@@ -798,13 +867,11 @@ def create_app():
     }
     td {
         border-color: #475569 !important;
+        overflow: hidden !important;
+        text-overflow: ellipsis !important;
     }
     tr:hover {
         background-color: #334155 !important;
-    }
-    /* Override any light theme remnants */
-    .gradio-container {
-        background-color: #0f172a !important;
     }
     /* Need More Context badge */
     .need-context-badge {
@@ -823,10 +890,33 @@ def create_app():
         background-color: #475569;
         color: #94a3b8;
     }
+    /* Ensure code blocks don't overflow */
+    .gradio-container pre,
+    .gradio-container code {
+        max-width: 100% !important;
+        overflow-x: auto !important;
+        box-sizing: border-box !important;
+    }
+    /* Fix Group component width */
+    .gradio-group {
+        width: 100% !important;
+        max-width: 100% !important;
+        box-sizing: border-box !important;
+    }
     """
-
+    # JavaScript to auto-redirect to dark theme if not already set (injected in <head>)
+    head_js = """
+    <script>
+        const url = new URL(window.location);
+        if (url.searchParams.get('__theme') !== 'dark') {
+            url.searchParams.set('__theme', 'dark');
+            window.location.href = url.href;
+        }
+    </script>
+    """
     with gr.Blocks(
         css=css,
+        head=head_js,
         theme=gr.themes.Soft(
             primary_hue="indigo",
             secondary_hue="blue",
@@ -894,7 +984,7 @@ def create_app():
 
                 with gr.Row():
                     cluster_sample_toggle = gr.Checkbox(
-                        label="One sample per cluster",
+                        label="Show only one log per log template",
                         value=False,
                         interactive=True,
                         scale=2,
