@@ -17,12 +17,19 @@ import psycopg2
 from test_end_to_end import run_evaluation
 
 # Configure logger
-logger = logging.getLogger(__name__)
+# You can change this to your actual service name
+SERVICE_NAME = "annotation-interface"
+
 logging.basicConfig(
     level=logging.INFO,
-    format="%(asctime)s - annotation interface - %(name)s - %(levelname)s - %(message)s",
+    format="%(asctime)s  %(levelname)-7s  "
+    f"[{SERVICE_NAME}]  "
+    "%(name)s  "
+    "%(filename)s:%(lineno)d  |  %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
 )
 
+logger = logging.getLogger(__name__)
 # Suppress verbose logging from third-party libraries
 logging.getLogger("deepeval").setLevel(logging.WARNING)
 logging.getLogger("httpx").setLevel(logging.WARNING)
@@ -37,6 +44,9 @@ class DataAnnotationApp:
         self.all_data = []  # Store all data before cluster filtering
         self.feedback_data = []
         self.show_cluster_sample = False  # Toggle state for cluster sampling
+        self.entry_index_map: Dict[
+            str, int
+        ] = {}  # (filename, logMessage) -> index for O(1) lookup
 
         # Evaluation results storage: dict keyed by entry index
         self.evaluation_results: Dict[int, Dict[str, Any]] = {}
@@ -110,6 +120,12 @@ class DataAnnotationApp:
                         "labels": labels if isinstance(labels, dict) else {},
                     }
                     self.all_data.append(data_entry)
+                    key = f"{data_entry['filename']}-{data_entry.get('logMessage')}"
+                    # logger.info(f"Key: {key}")
+                    self.entry_index_map[key] = (
+                        len(self.all_data) - 1,
+                        data_entry.get("step_by_step_solution"),
+                    )
 
                 # Initialize data with all entries
                 self.data = self.all_data.copy()
@@ -123,12 +139,14 @@ class DataAnnotationApp:
             )
             self.all_data = []
             self.data = []
+            self.entry_index_map = {}
         except Exception as e:
             logger.error(
                 f"Error loading data from database table '{self.table_name}': {e}"
             )
             self.all_data = []
             self.data = []
+            self.entry_index_map = {}
 
     def load_feedback(self):
         """Load existing feedback data."""
@@ -154,9 +172,21 @@ class DataAnnotationApp:
 
         for entry in self.feedback_data:
             if "eval_metrics" in entry:
-                # Use index as the key (consistent with how get_current_entry looks up feedback)
-                entry_index = entry.get("index")
+                # Determine the index by filename and timestamp from labels
+                key = f"{entry.get('filename')}-{entry.get('logMessage')}"
+                entry_index, step_by_step_solution = self.entry_index_map.get(key)
                 if entry_index is not None:
+                    old_step_by_step_solution = entry.get("stepByStepSolution")
+                    old_entry_index = entry.get("index")
+
+                    entry["index"] = entry_index
+                    entry["stepByStepSolution"] = step_by_step_solution
+                    if (
+                        old_step_by_step_solution != step_by_step_solution
+                        or old_entry_index != entry_index
+                    ):
+                        self.run_evaluation_on_feedback(entry_index)
+                    logger.info(f"Entry index: {entry_index} ")
                     self.evaluation_results[entry_index] = {
                         "success": entry.get("eval_success", False),
                         "metrics": entry.get("eval_metrics", []),
@@ -646,22 +676,14 @@ class DataAnnotationApp:
         success = self.eval_summary.get("success", 0)
         percentage = (success / total * 100) if total > 0 else 0
 
-        # Color based on success rate
-        if percentage >= 80:
-            color = "#22c55e"  # green
-        elif percentage >= 50:
-            color = "#eab308"  # yellow
-        else:
-            color = "#ef4444"  # red
-
         return f"""
         <div style='padding: 16px; background-color: #1e293b; border: 1px solid #475569; 
                     border-radius: 8px; display: flex; align-items: center; gap: 20px;'>
-            <div style='font-size: 1.2em; font-weight: 600; color: {color};'>
+            <div style='font-size: 1.2em; font-weight: 600; color: "#22c55e";'>
                 {success} / {total} tests passed ({percentage:.1f}%)
             </div>
             <div style='flex-grow: 1; background-color: #334155; border-radius: 4px; height: 8px;'>
-                <div style='width: {percentage}%; background-color: {color}; height: 100%; 
+                <div style='width: {percentage}%; background-color: "#22c55e"; height: 100%; 
                             border-radius: 4px; transition: width 0.3s;'></div>
             </div>
         </div>
