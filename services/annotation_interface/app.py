@@ -121,7 +121,6 @@ class DataAnnotationApp:
                     }
                     self.all_data.append(data_entry)
                     key = f"{data_entry['filename']}-{data_entry.get('logMessage')}"
-                    # logger.info(f"Key: {key}")
                     self.entry_index_map[key] = (
                         len(self.all_data) - 1,
                         data_entry.get("step_by_step_solution"),
@@ -186,7 +185,6 @@ class DataAnnotationApp:
                         or old_entry_index != entry_index
                     ):
                         self.run_evaluation_on_feedback(entry_index)
-                    logger.info(f"Entry index: {entry_index} ")
                     self.evaluation_results[entry_index] = {
                         "success": entry.get("eval_success", False),
                         "metrics": entry.get("eval_metrics", []),
@@ -771,6 +769,12 @@ def create_app():
 
     # Custom CSS for dark theme
     css = """
+    /* Standard container width */
+    .gradio-container {
+        max-width: 1200px !important;
+        margin-left: auto !important;
+        margin-right: auto !important;
+    }
     .summary-box {
         padding: 16px;
         border-radius: 8px;
