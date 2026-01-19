@@ -77,9 +77,9 @@ route:
   host: ""
   path: ""
   annotations: {}
-  tls: {}
-  #  termination: edge
-  #  insecureEdgeTerminationPolicy: Redirect
+  tls:
+    termination: edge
+    insecureEdgeTerminationPolicy: Allow
 
 resources:
   # We usually recommend not to specify default resources and to leave this as a conscious
